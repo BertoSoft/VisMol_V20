@@ -2,52 +2,329 @@
 
 #include <QMenu>
 #include <QMenuBar>
+#include <QGraphicsView>
+#include <QTimer>
+#include <QDate>
+#include <QTime>
+#include <QCloseEvent>
+#include <QMessageBox>
+
+// =========================================================================
+// ZONA: CICLO DE VIDA DE LA VENTANA
+// =========================================================================
 
 MoleculaVista::MoleculaVista(QWidget *parent)
     : QMainWindow(parent){
 
     initUi();
-
 }
 
-MoleculaVista::~MoleculaVista(){
+MoleculaVista::~MoleculaVista() {}
 
-}
+// =========================================================================
+// ZONA: INICIALIZACIONES DE INTERFAZ DE USUARIO (init)
+// =========================================================================
 
 void MoleculaVista::initUi(){
+
     setWindowTitle(NOMBRE_APP);
+
     initMenu();
+    initToolBars();
+    initAnimationBar();
+    initDockPanels();
+    initStatusBar();
+    initLienzo();
+    initConnect();
+    setTemaApp();
 }
 
 void MoleculaVista::initMenu(){
-    QMenuBar *menuBarSuperior = menuBar();
 
-    // Menu Archivo
-    QMenu *menuArchivo = menuBarSuperior->addMenu("&Archivo");
-    menuArchivo->addAction("Nuevo Proyecto");
-    menuArchivo->addAction("Abrir Proyecto (.json)");
-    menuArchivo->addAction("Guardar Proyecto (.json)");
+    QMenuBar* menuBarSuperior = menuBar();
+
+    QMenu* menuArchivo = menuBarSuperior->addMenu(tr("&Archivo"));
+    m_accionesArchivo.nuevo = menuArchivo->addAction(tr("Nuevo Proyecto"), this, &MoleculaVista::nuevoProyecto, QKeySequence::New);
+    m_accionesArchivo.abrir = menuArchivo->addAction(tr("Abrir Proyecto (.json)"), this, &MoleculaVista::abrirProyecto, QKeySequence::Open);
+    m_accionesArchivo.guardar = menuArchivo->addAction(tr("Guardar Proyecto (.json)"), this, &MoleculaVista::guardarProyecto, QKeySequence::Save);
     menuArchivo->addSeparator();
-    menuArchivo->addAction("Salir");
+    m_accionesArchivo.salir = menuArchivo->addAction(tr("Salir"), this, &MoleculaVista::salir, QKeySequence::Quit);
 
-    // Menú Importar / Exportar (Aislado para escalabilidad)
-    QMenu* menuFormatos = menuBarSuperior->addMenu("&Importar/Exportar");
-    menuFormatos->addAction("Importar Coordenadas XYZ (.xyz)");
-    menuFormatos->addAction("Exportar Entrada MOPAC (.mop)");
+    QMenu* menuFormatos = menuBarSuperior->addMenu(tr("&Importar/Exportar"));
+    m_accionesIO.importarXYZ = menuFormatos->addAction(tr("Importar Coordenadas XYZ (.xyz)"), this, &MoleculaVista::importarXYZ);
+    m_accionesIO.exportarMOPAC = menuFormatos->addAction(tr("Exportar Entrada MOPAC (.mop)"), this, &MoleculaVista::exportarMOPAC);
 
-    // Menú Edición
-    QMenu* menuEdicion = menuBarSuperior->addMenu("&Edición");
-    menuEdicion->addAction("Deshacer (Ctrl+Z)");
-    menuEdicion->addAction("Rehacer (Ctrl+Y)");
+    QMenu* menuEdicion = menuBarSuperior->addMenu(tr("&Edición"));
+    m_accionesEdicion.deshacer = menuEdicion->addAction(tr("Deshacer"), this, &MoleculaVista::deshacer, QKeySequence::Undo);
+    m_accionesEdicion.rehacer = menuEdicion->addAction(tr("Rehacer"), this, &MoleculaVista::rehacer, QKeySequence::Redo);
     menuEdicion->addSeparator();
-    menuEdicion->addAction("Limpiar Lienzo");
+    m_accionesEdicion.limpiarLienzo = menuEdicion->addAction(tr("Limpiar Lienzo"), this, &MoleculaVista::limpiarLienzo);
 
-    // Menú Cálculo
-    QMenu* menuCalculo = menuBarSuperior->addMenu("&Cálculo");
-    menuCalculo->addAction("Configurar Simulación MOPAC...");
+    QMenu* menuCalculo = menuBarSuperior->addMenu(tr("&Cálculo"));
+    m_accionesCalculo.configurarMopac = menuCalculo->addAction(tr("Configurar Simulación MOPAC..."), this, &MoleculaVista::configurarMopac);
 
-    // Menú Análisis
-    QMenu* menuAnalisis = menuBarSuperior->addMenu("&Análisis");
-    menuAnalisis->addAction("Mostrar Analizador Vibracional");
-    menuAnalisis->addAction("Ver Log de Salida MOPAC (.out)");
+    QMenu* menuAnalisis = menuBarSuperior->addMenu(tr("&Análisis"));
+    m_accionesAnalisis.mostrarFreq = menuAnalisis->addAction(tr("Mostrar Analizador Vibracional"), this, &MoleculaVista::mostrarFrecuencias);
+    m_accionesAnalisis.verLogOut = menuAnalisis->addAction(tr("Ver Log de Salida MOPAC (.out)"), this, &MoleculaVista::verLogOut);
+}
+
+void MoleculaVista::initToolBars(){
+
+    m_barraProyecto = addToolBar(tr("Proyecto"));
+    m_barraProyecto->setObjectName("barraProyecto");
+    m_barraProyecto->addAction(m_accionesArchivo.nuevo);
+    m_barraProyecto->addAction(m_accionesArchivo.abrir);
+    m_barraProyecto->addAction(m_accionesArchivo.guardar);
+    m_barraProyecto->addSeparator();
+    m_barraProyecto->addAction(m_accionesEdicion.deshacer);
+    m_barraProyecto->addAction(m_accionesEdicion.rehacer);
+    m_barraProyecto->addSeparator();
+    m_barraProyecto->addAction(m_accionesCalculo.configurarMopac);
+
+    m_barraElementos = new QToolBar(tr("Herramientas de Elementos"), this);
+    m_barraElementos->setObjectName("barraElementos");
+    addToolBar(Qt::LeftToolBarArea, m_barraElementos);
+
+    m_accionesElementos.carbono = new QAction(tr("Carbono (C)"), this);
+    m_accionesElementos.carbono->setCheckable(true);
+    m_accionesElementos.carbono->setChecked(true);
+
+    m_accionesElementos.hidrogeno = new QAction(tr("Hidrógeno (H)"), this);
+    m_accionesElementos.hidrogeno->setCheckable(true);
+
+    m_accionesElementos.oxigeno = new QAction(tr("Oxígeno (O)"), this);
+    m_accionesElementos.oxigeno->setCheckable(true);
+
+    m_accionesElementos.nitrogeno = new QAction(tr("Nitrógeno (N)"), this);
+    m_accionesElementos.nitrogeno->setCheckable(true);
+
+    m_accionesElementos.modoEnlace = new QAction(tr("Crear Enlace"), this);
+    m_accionesElementos.modoEnlace->setCheckable(true);
+
+    m_accionesElementos.modoRotar = new QAction(tr("Rotar Molécula"), this);
+    m_accionesElementos.modoRotar->setCheckable(true);
+
+    m_grupoElementos = new QActionGroup(this);
+    m_grupoElementos->addAction(m_accionesElementos.carbono);
+    m_grupoElementos->addAction(m_accionesElementos.hidrogeno);
+    m_grupoElementos->addAction(m_accionesElementos.oxigeno);
+    m_grupoElementos->addAction(m_accionesElementos.nitrogeno);
+    m_grupoElementos->addAction(m_accionesElementos.modoEnlace);
+    m_grupoElementos->addAction(m_accionesElementos.modoRotar);
+    m_grupoElementos->setExclusive(true);
+
+    m_barraElementos->addAction(m_accionesElementos.carbono);
+    m_barraElementos->addAction(m_accionesElementos.hidrogeno);
+    m_barraElementos->addAction(m_accionesElementos.oxigeno);
+    m_barraElementos->addAction(m_accionesElementos.nitrogeno);
+    m_barraElementos->addSeparator();
+    m_barraElementos->addAction(m_accionesElementos.modoEnlace);
+    m_barraElementos->addAction(m_accionesElementos.modoRotar);
+}
+
+void MoleculaVista::initAnimationBar()
+{
+    m_barraAnimacion = new QToolBar(tr("Control de Trayectoria / Animación"), this);
+    m_barraAnimacion->setObjectName("barraAnimacion");
+    addToolBar(Qt::BottomToolBarArea, m_barraAnimacion);
+
+    // =========================================================================
+    // MODIFICACIÓN DE CENTRADO COMPLETO (WIDGETS ESPACIADORES ELÁSTICOS)
+    // =========================================================================
+    // 1. Creamos el espaciador izquierdo
+    QWidget* espaciadorIzquierdo = new QWidget(this);
+    espaciadorIzquierdo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_barraAnimacion->addWidget(espaciadorIzquierdo);
+
+    // 2. Instanciamos las acciones de reproducción normales
+    m_accionesAnimacion.reproducirPausar = new QAction(tr("Reproducir"), this);
+    m_accionesAnimacion.reproducirPausar->setCheckable(true);
+
+    m_accionesAnimacion.fotogramaAnterior = new QAction(tr("<< Paso Anter."), this);
+    m_accionesAnimacion.fotogramaSiguiente = new QAction(tr("Paso Siguiente >>"), this);
+
+    m_deslizadorFotogramas = new QSlider(Qt::Horizontal, this);
+    m_deslizadorFotogramas->setMinimum(1);
+    m_deslizadorFotogramas->setMaximum(10);
+    m_deslizadorFotogramas->setFixedWidth(250);
+
+    m_lblFotogramaInfo = new QLabel(tr("Paso: 1 / 10"), this);
+    m_lblFotogramaInfo->setStyleSheet("padding: 0 8px; font-weight: bold;");
+
+    // 3. Añadimos el bloque compacto de controles al lienzo de la barra
+    m_barraAnimacion->addAction(m_accionesAnimacion.fotogramaAnterior);
+    m_barraAnimacion->addAction(m_accionesAnimacion.reproducirPausar);
+    m_barraAnimacion->addAction(m_accionesAnimacion.fotogramaSiguiente);
+    m_barraAnimacion->addWidget(m_deslizadorFotogramas);
+    m_barraAnimacion->addWidget(m_lblFotogramaInfo);
+
+    // 4. Creamos el espaciador derecho para cerrar el sándwich de centrado
+    QWidget* espaciadorDerecho = new QWidget(this);
+    espaciadorDerecho->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_barraAnimacion->addWidget(espaciadorDerecho);
+
+    m_barraAnimacion->setVisible(true);
+}
+
+void MoleculaVista::initDockPanels()
+{
+    m_panelFrecuencias = new QDockWidget(tr("Analizador de Modos Vibracionales (IR)"), this);
+    m_panelFrecuencias->setObjectName("panelFrecuencias");
+    m_panelFrecuencias->setAllowedAreas(Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
+
+    m_listaFrecuencias = new QListWidget(m_panelFrecuencias);
+    m_listaFrecuencias->setObjectName("listaFrecuencias");
+    m_listaFrecuencias->addItem("3120.4 cm⁻¹ - Tensión C-H (Simétrica)");
+    m_listaFrecuencias->addItem("1650.1 cm⁻¹ - Estiramiento C=C");
+    m_listaFrecuencias->addItem("1430.5 cm⁻¹ - Flexión en el plano");
+
+    m_panelFrecuencias->setWidget(m_listaFrecuencias);
+    addDockWidget(Qt::RightDockWidgetArea, m_panelFrecuencias);
+    m_panelFrecuencias->setVisible(true);
+}
+
+void MoleculaVista::initStatusBar()
+{
+    m_barraEstado = new QStatusBar(this);
+    setStatusBar(m_barraEstado);
+
+    m_lblEstadoTexto = new QLabel(tr(" Listo para iniciar proyecto."), this);
+    m_lblEstadoFecha = new QLabel(this);
+    m_lblEstadoHora  = new QLabel(this);
+
+    QList<QLabel*> etiquetas = { m_lblEstadoTexto, m_lblEstadoFecha, m_lblEstadoHora };
+    for (QLabel* etiqueta : etiquetas) {
+        etiqueta->setFrameShape(QFrame::Panel);
+        etiqueta->setFrameShadow(QFrame::Sunken);
+        etiqueta->setAlignment(Qt::AlignCenter);
+    }
+    m_lblEstadoTexto->setAlignment(Qt::AlignLeft);
+
+    m_barraEstado->addWidget(m_lblEstadoTexto, 1);
+    m_barraEstado->addPermanentWidget(m_lblEstadoFecha);
+    m_barraEstado->addPermanentWidget(m_lblEstadoHora);
+
+    m_lblEstadoFecha->setText(QDate::currentDate().toString("dddd, d 'de' MMMM 'de' yyyy"));
+    m_lblEstadoHora->setText(QTime::currentTime().toString("hh:mm:ss"));
+
+    QTimer* timerReloj = new QTimer(this);
+    connect(timerReloj, &QTimer::timeout, this, [this]() {
+        m_lblEstadoFecha->setText(QDate::currentDate().toString("dddd, d 'de' MMMM 'de' yyyy"));
+        m_lblEstadoHora->setText(QTime::currentTime().toString("hh:mm:ss"));
+    });
+    timerReloj->start(1000);
+}
+
+void MoleculaVista::initLienzo()
+{
+    QGraphicsView* visorCentral = new QGraphicsView(this);
+    visorCentral->setObjectName("visorMolecular");
+    setCentralWidget(visorCentral);
+}
+
+void MoleculaVista::initConnect()
+{
+    connect(m_accionesElementos.carbono, &QAction::triggered, this, [this](){ alSeleccionarElemento("C"); });
+    connect(m_accionesElementos.hidrogeno, &QAction::triggered, this, [this](){ alSeleccionarElemento("H"); });
+    connect(m_accionesElementos.oxigeno, &QAction::triggered, this, [this](){ alSeleccionarElemento("O"); });
+    connect(m_accionesElementos.nitrogeno, &QAction::triggered, this, [this](){ alSeleccionarElemento("N"); });
+    connect(m_accionesElementos.modoEnlace, &QAction::triggered, this, &MoleculaVista::alActivarModoEnlace);
+    connect(m_accionesElementos.modoRotar, &QAction::triggered, this, &MoleculaVista::alActivarModoRotar);
+
+    connect(m_accionesAnimacion.reproducirPausar, &QAction::toggled, this, &MoleculaVista::alAlternarReproduccionAnimacion);
+    connect(m_deslizadorFotogramas, &QSlider::valueChanged, this, &MoleculaVista::alCambiarDeslizadorFotograma);
+
+    connect(m_listaFrecuencias, &QListWidget::currentRowChanged, this, &MoleculaVista::alSeleccionarFrecuencia);
+}
+// =========================================================================
+// ZONA: PULSACIONES DE MENÚ SUPERIOR (SLOTS)
+// =========================================================================
+
+void MoleculaVista::nuevoProyecto()   { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Nuevo Proyecto")); }
+void MoleculaVista::abrirProyecto()   { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Abrir Proyecto")); }
+void MoleculaVista::guardarProyecto() { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Guardar Proyecto")); }
+void MoleculaVista::salir()           { this->close(); }
+void MoleculaVista::importarXYZ()     { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Importar XYZ")); }
+void MoleculaVista::exportarMOPAC()   { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Exportar MOPAC")); }
+void MoleculaVista::deshacer()        { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Deshacer")); }
+void MoleculaVista::rehacer()         { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Rehacer")); }
+void MoleculaVista::limpiarLienzo()   { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Limpiar Lienzo")); }
+void MoleculaVista::configurarMopac() { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Configurar MOPAC")); }
+
+void MoleculaVista::mostrarFrecuencias()
+{
+    m_panelFrecuencias->setVisible(!m_panelFrecuencias->isVisible());
+}
+
+void MoleculaVista::verLogOut()        { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Ver Log Out")); }
+
+// =========================================================================
+// ZONA: INTERACCIONES Y BOTONERÍA DE INTERFAZ
+// =========================================================================
+
+void MoleculaVista::alSeleccionarElemento(const QString& elemento)
+{
+    m_lblEstadoTexto->setText(tr(" Herramienta activa: Dibujando Átomo de %1").arg(elemento));
+}
+
+void MoleculaVista::alActivarModoEnlace()
+{
+    m_lblEstadoTexto->setText(tr(" Herramienta activa: Modo Enlace Covalente habilitado."));
+}
+
+void MoleculaVista::alActivarModoRotar()
+{
+    m_lblEstadoTexto->setText(tr(" Herramienta activa: Modo Rotación y Vista 3D."));
+}
+
+void MoleculaVista::alAlternarReproduccionAnimacion(bool activado)
+{
+    m_accionesAnimacion.reproducirPausar->setText(activado ? tr("Pausar") : tr("Reproducir"));
+    m_lblEstadoTexto->setText(activado ? tr(" Trayectoria en reproducción...") : tr(" Animación en pausa."));
+}
+
+void MoleculaVista::alCambiarDeslizadorFotograma(int fotograma)
+{
+    m_lblFotogramaInfo->setText(tr("Paso: %1 / %2").arg(fotograma).arg(m_deslizadorFotogramas->maximum()));
+}
+
+void MoleculaVista::alSeleccionarFrecuencia(int indice)
+{
+    if (indice < 0) return;
+    QString textoModo = m_listaFrecuencias->item(indice)->text();
+    m_lblEstadoTexto->setText(tr(" Visualizando Modo: %1").arg(textoModo));
+}
+
+void MoleculaVista::closeEvent(QCloseEvent *evento)
+{
+    evento->accept();
+}
+
+// =========================================================================
+// ZONA: GESTIÓN DE HOJAS DE ESTILO (QSS)
+// =========================================================================
+
+void MoleculaVista::setTemaApp()
+{
+    QString estilo =
+        "QMainWindow { background-color: #1a1a1a; color: #e0e0e0; }"
+        "QMenuBar { background-color: #222222; color: #e0e0e0; border-bottom: 1px solid #2d2d2d; }"
+        "QMenuBar::item:selected { background-color: #2f3e46; color: #ffffff; }"
+        "QMenu { background-color: #222222; color: #e0e0e0; border: 1px solid #333333; }"
+        "QMenu::item:selected { background-color: #1e3a8a; color: #ffffff; }"
+        "QToolBar { background-color: #222222; border: 1px solid #2d2d2d; spacing: 4px; padding: 4px; }"
+        "QToolBar QToolButton { background-color: #2b2b2b; color: #e0e0e0; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 12px; font-size: 11px; }"
+        "QToolBar QToolButton:hover { background-color: #3a3a3a; border: 1px solid #4a4a4a; color: #ffffff; }"
+        "QToolBar QToolButton:checked { background-color: #1e3a8a; border: 1px solid #3b82f6; color: #ffffff; font-weight: bold; }"
+        "QToolBar#barraElementos QToolButton { min-width: 120px; text-align: left; }"
+        "QGraphicsView#visorMolecular { background-color: #121212; border: 1px solid #2d2d2d; }"
+        "QDockWidget { titlebar-close-icon: none; titlebar-normal-icon: none; color: #aaaaaa; font-weight: bold; }"
+        "QDockWidget::title { background-color: #222222; text-align: center; padding-top: 12px; padding-bottom: 12px; border-bottom: 2px solid #2d2d2d; }"
+        "QListWidget#listaFrecuencias { background-color: #1e1e1e; color: #00ff66; border: 1px solid #2d2d2d; font-family: 'Courier New', monospace; padding: 5px; margin-top: 10px; }"
+        "QListWidget#listaFrecuencias::item:selected { background-color: #1e3a8a; color: #ffffff; }"
+        "QLabel#lblFotogramaInfo { color: #3b82f6; font-weight: bold; padding: 0 8px; }"
+        "QStatusBar { background-color: #151515; border-top: 1px solid #2d2d2d; }"
+        "QStatusBar QLabel { border: 1px solid #2d2d2d; border-radius: 3px; padding: 3px 10px; background-color: #1e1e1e; color: #cccccc; font-size: 11px; }";
+
+    this->setStyleSheet(estilo);
 }
