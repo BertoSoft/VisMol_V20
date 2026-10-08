@@ -12,5 +12,6 @@
         <file>iconos/rehacer.png</file>
         <file>iconos/deshacer.png</file>
         <file>iconos/configurar.png</file>
+        <file>iconos/limpiar.png</file>
     </qresource>
 </RCC>

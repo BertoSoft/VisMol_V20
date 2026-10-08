@@ -77,6 +77,7 @@ void MoleculaVista::initMenu(){
 
     menuEdicion->addSeparator();
     m_accionesEdicion.limpiarLienzo = menuEdicion->addAction(tr("Limpiar Lienzo"), this, &MoleculaVista::limpiarLienzo);
+    m_accionesEdicion.limpiarLienzo->setIcon(QIcon(":/iconos/limpiar.png"));
 
     QMenu* menuCalculo = menuBarSuperior->addMenu(tr("&Cálculo"));
     m_accionesCalculo.configurarMopac = menuCalculo->addAction(tr("Configurar Simulación MOPAC..."), this, &MoleculaVista::configurarMopac);
@@ -103,6 +104,7 @@ void MoleculaVista::initToolBars(){
     m_barraProyecto->addSeparator();
     m_barraProyecto->addAction(m_accionesEdicion.deshacer);
     m_barraProyecto->addAction(m_accionesEdicion.rehacer);
+    m_barraProyecto->addAction(m_accionesEdicion.limpiarLienzo);
     m_barraProyecto->addSeparator();
     m_barraProyecto->addSeparator();
     m_barraProyecto->addAction(m_accionesCalculo.configurarMopac);
@@ -339,25 +341,172 @@ void MoleculaVista::closeEvent(QCloseEvent *evento){
 void MoleculaVista::setTemaApp(){
 
     QString estilo =
-        "QMainWindow { background-color: #1a1a1a; color: #e0e0e0; }"
-        "QMenuBar { background-color: #222222; color: #e0e0e0; border-bottom: 1px solid #2d2d2d; }"
-        "QMenuBar::item:selected { background-color: #2f3e46; color: #ffffff; }"
-        "QMenu { background-color: #222222; color: #e0e0e0; border: 1px solid #333333; }"
-        "QMenu::item:selected { background-color: #1e3a8a; color: #ffffff; }"
-        "QToolBar { background-color: #222222; border: 1px solid #2d2d2d; spacing: 4px; padding: 4px; }"
-        "QToolBar QToolButton { background-color: #2b2b2b; color: #e0e0e0; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 12px; font-size: 15px; }"
-        "QToolBar QToolButton:hover { background-color: #3a3a3a; border: 1px solid #4a4a4a; color: #ffffff; }"
-        "QToolBar QToolButton:checked { background-color: #1e3a8a; border: 1px solid #3b82f6; color: #ffffff; font-weight: bold; }"
-        "QToolBar#barraElementos QToolButton { min-width: 120px; text-align: left; }"
-        "QGraphicsView#visorMolecular { background-color: #121212; border: 1px solid #2d2d2d; }"
-        "QDockWidget { titlebar-close-icon: none; titlebar-normal-icon: none; color: #aaaaaa; font-weight: bold; }"
-        "QDockWidget::title { background-color: #222222; text-align: center; padding-top: 12px; padding-bottom: 12px; border-bottom: 2px solid #2d2d2d; }"
-        "QListWidget#listaFrecuencias { background-color: #1e1e1e; color: #00ff66; border: 1px solid #2d2d2d; font-family: 'Courier New', monospace; padding: 5px; margin-top: 10px; }"
-        "QListWidget#listaFrecuencias::item:selected { background-color: #1e3a8a; color: #ffffff; }"
-        "QLabel#lblFotogramaInfo { color: #3b82f6; font-weight: bold; padding: 0 8px; }"
-        "QStatusBar { background-color: #151515; border-top: 1px solid #2d2d2d; }"
-        "QStatusBar QLabel { border: 1px solid #2d2d2d; border-radius: 3px; padding: 3px 10px; background-color: #1e1e1e; color: #cccccc; font-size: 11px; }"
-                     "QTextEdit#textConsolaMopac { background-color: #0a0a0a; color: #00ff66; border: 1px solid #2d2d2d; font-family: 'Courier New', monospace; font-size: 12px; padding: 6px; }";
+        // Ventana Principal y Textos base
+        "QMainWindow { "
+        "background-color: #181818; "
+        "color: #e5e5e5; "
+        "font-family: 'Segoe UI', Arial, sans-serif; "
+        "}"
+
+        // Menú Superior - Unificado con un azul moderno y sutil
+        "QMenuBar { "
+        "background-color: #222222; "
+        "color: #cccccc; "
+        "border-bottom: 1px solid #2d2d2d; "
+        "padding: 2px; "
+        "}"
+
+        "QMenuBar::item { "
+        "padding: 4px 10px; "
+        "border-radius: 4px; "
+        "}"
+
+        "QMenuBar::item:selected { "
+        "background-color: #2a2a2a; "
+        "color: #ffffff; "
+        "}"
+
+        "QMenu { "
+        "background-color: #222222; "
+        "color: #e5e5e5; "
+        "border: 1px solid #333333; "
+        "padding: 4px; "
+        "}"
+
+        "QMenu::item { "
+        "padding: 6px 25px 6px 20px; "
+        "border-radius: 3px; "
+        "}"
+
+        "QMenu::item:selected { "
+        "background-color: #0f52ba; "
+        "color: #ffffff; "
+        "}" // Azul Zafiro comercial
+
+        "QMenu::separator { "
+        "height: 1px; "
+        "background: #333333; "
+        "margin: 4px 0; "
+        "}"
+
+        // Barras de Herramientas - Limpieza de Paddings e Iconos Estables
+        "QToolBar { "
+        "background-color: #222222; "
+        "border: 1px solid #2d2d2d; "
+        "spacing: 6px; "
+        "padding: 4px; "
+        "}"
+
+        "QToolBar QToolButton { "
+        "background-color: #2b2b2b; "
+        "color: #e0e0e0; "
+        "border: 1px solid #3a3a3a; "
+        "border-radius: 4px; "
+        "padding: 4px 8px; "
+        "font-size: 13px; "
+        "icon-size: 20px 20px; "
+        "}"
+
+        "QToolBar QToolButton:hover { "
+        "background-color: #383838; "
+        "border: 1px solid #4a4a4a; "
+        "color: #ffffff; "
+        "}"
+
+        "QToolBar QToolButton:checked { "
+        "background-color: #0f52ba; "
+        "border: 1px solid #3b82f6; "
+        "color: #ffffff; "
+        "font-weight: bold; "
+        "}"
+
+        // Ajuste barra de elementos (Adiós a los 120px forzados incómodos)
+        "QToolBar#barraElementos QToolButton { "
+        "   min-width: 160px; "         /* <--- Fuerzas el ancho mínimo */
+        "   max-width: 160px; "         /* <--- Fuerzas el ancho máximo (juntos hacen ancho fijo) */
+        "   text-align: left; "         /* <--- Alinea el texto a la izquierda para un look limpio */
+        "   padding: 8px 12px; "        /* <--- Espaciado interno cómodo */
+        "   font-size: 14px; "          /* <--- Tamaño de letra legible que configuramos antes */
+        "   margin-bottom: 2px; "       /* <--- Separación sutil vertical entre botones */
+        "}"
+
+        // Lienzo Central
+        "QGraphicsView#visorMolecular { "
+        "background-color: #101010; "
+        "border: 1px solid #252525; "
+        "border-radius: 4px; "
+        "}"
+
+        // Paneles Acoplables (Docks) - Más finos y profesionales
+        "QDockWidget { "
+        "color: #bbbbbb; "
+        "font-weight: bold; "
+        "font-size: 12px; "
+        "}"
+
+        "QDockWidget::title { "
+        "background-color: #1c1c1c; "
+        "text-align: left; "
+        "padding: 8px 12px; "
+        "border-bottom: 1px solid #2d2d2d; "
+        "}"
+
+        // Listas (Frecuencias) - Un verde esmeralda más tecnológico y menos "Matrix"
+        "QListWidget#listaFrecuencias { "
+        "background-color: #141414; "
+        "color: #39ff14; "
+        "border: 1px solid #2d2d2d; "
+        "border-radius: 4px; "
+        "font-family: 'Consolas', 'Courier New', monospace; "
+        "font-size: 12px; "
+        "padding: 6px; "
+        "}"
+
+        "QListWidget#listaFrecuencias::item { "
+        "padding: 6px; "
+        "border-radius: 3px; "
+        "}"
+
+        "QListWidget#listaFrecuencias::item:selected { "
+        "background-color: #0f52ba; "
+        "color: #ffffff; "
+        "}"
+
+        // Controles de Animación
+        "QLabel#lblFotogramaInfo { "
+        "color: #3b82f6; "
+        "font-weight: bold; "
+        "font-size: 14px; "
+        "}"
+
+        // Barra de Estado
+        "QStatusBar { "
+        "   background-color: #151515; " // Fondo base ligeramente más oscuro
+        "   border-top: 1px solid #2d2d2d; "
+        "}"
+
+        "QStatusBar QLabel { "
+        "   font-size: 13px; "
+        "   color: #cccccc; "
+        "   padding: 4px 12px; "
+        "   background-color: #101010; " // Fondo interior más oscuro para simular el hueco
+        "   /* Bordes simulados para potenciar el efecto Sunken (Hundido) */"
+        "   border-top: 1px solid #080808; "    // Sombra superior interna
+        "   border-left: 1px solid #080808; "   // Sombra izquierda interna
+        "   border-bottom: 1px solid #2a2a2a; " // Brillo inferior (reflejo del borde)
+        "   border-right: 1px solid #2a2a2a; "  // Brillo derecho
+        "   border-radius: 2px; "
+        "   margin-right: 4px; " // Separación elegante entre los cuadros
+        "}"
+
+        // Consola de Simulación
+        "QTextEdit#textConsolaMopac { "
+        "background-color: #101010; "
+        "color: #e5e5e5; border: 1px solid #2d2d2d; "
+        "font-family: 'Consolas', monospace; "
+        "font-size: 12px; "
+        "padding: 8px; "
+        "}";
 
     this->setStyleSheet(estilo);
 }
