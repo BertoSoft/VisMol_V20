@@ -33,6 +33,7 @@ void MoleculaVista::initUi(){
     initToolBars();
     initAnimationBar();
     initDockPanels();
+    initPanelConsola();
     initStatusBar();
     initLienzo();
     initConnect();
@@ -44,9 +45,21 @@ void MoleculaVista::initMenu(){
     QMenuBar* menuBarSuperior = menuBar();
 
     QMenu* menuArchivo = menuBarSuperior->addMenu(tr("&Archivo"));
+
+    // Asignación de Iconos desde el archivo de recursos (.qrc)
     m_accionesArchivo.nuevo = menuArchivo->addAction(tr("Nuevo Proyecto"), this, &MoleculaVista::nuevoProyecto, QKeySequence::New);
+    m_accionesArchivo.nuevo->setIcon(QIcon(":/iconos/nuevo.png"));
+
     m_accionesArchivo.abrir = menuArchivo->addAction(tr("Abrir Proyecto (.json)"), this, &MoleculaVista::abrirProyecto, QKeySequence::Open);
+    m_accionesArchivo.abrir->setIcon(QIcon(":/iconos/abrir.png"));
+
+    // Nueva acción solicitada: Cerrar Proyecto (puedes enlazarla a un slot como &MoleculaVista::cerrarProyecto)
+    m_accionesArchivo.cerrar = menuArchivo->addAction(tr("Cerrar Proyecto"), this, &MoleculaVista::limpiarLienzo, QKeySequence::Close);
+    m_accionesArchivo.cerrar->setIcon(QIcon(":/iconos/cerrar.png")); // Asegúrate de tener este icono
+
     m_accionesArchivo.guardar = menuArchivo->addAction(tr("Guardar Proyecto (.json)"), this, &MoleculaVista::guardarProyecto, QKeySequence::Save);
+    m_accionesArchivo.guardar->setIcon(QIcon(":/iconos/guardar.png"));
+
     menuArchivo->addSeparator();
     m_accionesArchivo.salir = menuArchivo->addAction(tr("Salir"), this, &MoleculaVista::salir, QKeySequence::Quit);
 
@@ -56,15 +69,23 @@ void MoleculaVista::initMenu(){
 
     QMenu* menuEdicion = menuBarSuperior->addMenu(tr("&Edición"));
     m_accionesEdicion.deshacer = menuEdicion->addAction(tr("Deshacer"), this, &MoleculaVista::deshacer, QKeySequence::Undo);
+    m_accionesEdicion.deshacer->setIcon(QIcon(":/iconos/deshacer.png"));
+
     m_accionesEdicion.rehacer = menuEdicion->addAction(tr("Rehacer"), this, &MoleculaVista::rehacer, QKeySequence::Redo);
+    m_accionesEdicion.rehacer->setIcon(QIcon(":/iconos/rehacer.png"));
+
     menuEdicion->addSeparator();
     m_accionesEdicion.limpiarLienzo = menuEdicion->addAction(tr("Limpiar Lienzo"), this, &MoleculaVista::limpiarLienzo);
 
     QMenu* menuCalculo = menuBarSuperior->addMenu(tr("&Cálculo"));
     m_accionesCalculo.configurarMopac = menuCalculo->addAction(tr("Configurar Simulación MOPAC..."), this, &MoleculaVista::configurarMopac);
+    m_accionesCalculo.configurarMopac->setIcon(QIcon(":/iconos/configurar.png"));
 
     QMenu* menuAnalisis = menuBarSuperior->addMenu(tr("&Análisis"));
     m_accionesAnalisis.mostrarFreq = menuAnalisis->addAction(tr("Mostrar Analizador Vibracional"), this, &MoleculaVista::mostrarFrecuencias);
+    m_accionesAnalisis.mostrarConsola = menuAnalisis->addAction(tr("Mostrar Monitor de Simulación"), this, [this](){
+        if(m_panelConsola) m_panelConsola->setVisible(!m_panelConsola->isVisible());
+    });
     m_accionesAnalisis.verLogOut = menuAnalisis->addAction(tr("Ver Log de Salida MOPAC (.out)"), this, &MoleculaVista::verLogOut);
 }
 
@@ -75,6 +96,7 @@ void MoleculaVista::initToolBars(){
     m_barraProyecto->addAction(m_accionesArchivo.nuevo);
     m_barraProyecto->addAction(m_accionesArchivo.abrir);
     m_barraProyecto->addAction(m_accionesArchivo.guardar);
+    m_barraProyecto->addAction(m_accionesArchivo.cerrar);
     m_barraProyecto->addSeparator();
     m_barraProyecto->addAction(m_accionesEdicion.deshacer);
     m_barraProyecto->addAction(m_accionesEdicion.rehacer);
@@ -120,6 +142,27 @@ void MoleculaVista::initToolBars(){
     m_barraElementos->addSeparator();
     m_barraElementos->addAction(m_accionesElementos.modoEnlace);
     m_barraElementos->addAction(m_accionesElementos.modoRotar);
+}
+
+void MoleculaVista::initPanelConsola()
+{
+    m_panelConsola = new QDockWidget(tr("Monitor de Simulación en Vivo (MOPAC)"), this);
+    m_panelConsola->setObjectName("panelConsolaMopac");
+    m_panelConsola->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
+
+    m_textoConsola = new QTextEdit(m_panelConsola);
+    m_textoConsola->setObjectName("textConsolaMopac");
+    m_textoConsola->setReadOnly(true);
+
+    // Texto de simulación inicial simulado para desarrollo visual
+    m_textoConsola->append("--- VISMOL: ESPERANDO EJECUCIÓN DEL MOTOR MOPAC ---");
+    m_textoConsola->append(" > Use 'Configurar Simulación MOPAC...' para iniciar.");
+
+    m_panelConsola->setWidget(m_textoConsola);
+    addDockWidget(Qt::BottomDockWidgetArea, m_panelConsola);
+
+    // Por diseño de UI limpia, se inicia oculto hasta que empiece el cálculo
+    m_panelConsola->setVisible(false);
 }
 
 void MoleculaVista::initAnimationBar()
@@ -324,7 +367,8 @@ void MoleculaVista::setTemaApp()
         "QListWidget#listaFrecuencias::item:selected { background-color: #1e3a8a; color: #ffffff; }"
         "QLabel#lblFotogramaInfo { color: #3b82f6; font-weight: bold; padding: 0 8px; }"
         "QStatusBar { background-color: #151515; border-top: 1px solid #2d2d2d; }"
-        "QStatusBar QLabel { border: 1px solid #2d2d2d; border-radius: 3px; padding: 3px 10px; background-color: #1e1e1e; color: #cccccc; font-size: 11px; }";
+        "QStatusBar QLabel { border: 1px solid #2d2d2d; border-radius: 3px; padding: 3px 10px; background-color: #1e1e1e; color: #cccccc; font-size: 11px; }"
+                     "QTextEdit#textConsolaMopac { background-color: #0a0a0a; color: #00ff66; border: 1px solid #2d2d2d; font-family: 'Courier New', monospace; font-size: 12px; padding: 6px; }";
 
     this->setStyleSheet(estilo);
 }

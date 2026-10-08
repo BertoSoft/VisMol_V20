@@ -1,0 +1,16 @@
+<RCC>
+    <qresource prefix="/">
+        <file>iconos/salir.png</file>
+        <file>iconos/rotar.png</file>
+        <file>iconos/optimizacion.png</file>
+        <file>iconos/nuevo.png</file>
+        <file>iconos/importar.png</file>
+        <file>iconos/guardar.png</file>
+        <file>iconos/exportar.png</file>
+        <file>iconos/cerrar.png</file>
+        <file>iconos/abrir.png</file>
+        <file>iconos/rehacer.png</file>
+        <file>iconos/deshacer.png</file>
+        <file>iconos/configurar.png</file>
+    </qresource>
+</RCC>

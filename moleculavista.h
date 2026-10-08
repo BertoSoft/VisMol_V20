@@ -12,6 +12,7 @@
 #include <QSlider>
 #include <QDockWidget>
 #include <QListWidget>
+#include <QTextEdit>
 
 class MoleculaView;
 
@@ -34,6 +35,7 @@ private:
     void initToolBars();
     void initAnimationBar();
     void initDockPanels();
+    void initPanelConsola();
     void initStatusBar();
     void initConnect();
     void initLienzo();
@@ -75,6 +77,7 @@ private:
         QAction* nuevo    = nullptr;
         QAction* abrir    = nullptr;
         QAction* guardar  = nullptr;
+        QAction* cerrar   = nullptr;
         QAction* salir    = nullptr;
     } m_accionesArchivo;
 
@@ -94,8 +97,9 @@ private:
     } m_accionesCalculo;
 
     struct AccionesAnálisis {
-        QAction* mostrarFreq = nullptr;
-        QAction* verLogOut   = nullptr;
+        QAction* mostrarFreq    = nullptr;
+        QAction* mostrarConsola = nullptr;
+        QAction* verLogOut      = nullptr;
     } m_accionesAnalisis;
 
     struct AccionesElementos {
@@ -128,6 +132,8 @@ private:
     QLabel*        m_lblFotogramaInfo     = nullptr;
 
     QDockWidget*   m_panelFrecuencias     = nullptr;
+    QDockWidget*   m_panelConsola        = nullptr;
+    QTextEdit*     m_textoConsola        = nullptr;
     QListWidget*   m_listaFrecuencias     = nullptr;
 
     MoleculaLienzo* m_lienzo              = nullptr;

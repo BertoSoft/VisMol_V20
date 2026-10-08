@@ -5,6 +5,9 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets)
 
 qt_standard_project_setup()
 
+# Habilita el compilador automático de recursos de Qt (RCC)
+set(CMAKE_AUTORCC ON)
+
 # Compilación aislada y limpia exclusivamente orientada a la Interfaz Gráfica
 qt_add_executable(VisMol_V20
     WIN32 MACOSX_BUNDLE
@@ -13,10 +16,7 @@ qt_add_executable(VisMol_V20
     moleculavista.h
     moleculalienzo.h
     moleculalienzo.cpp
-    # moleculaview.h     # Ocultado temporalmente
-    # moleculaview.cpp   # Ocultado temporalmente
-    # moleculamat.h      # Ocultado temporalmente
-    # moleculamat.cpp    # Ocultado temporalmente
+    iconos.qrc            # Mantener el archivo aquí es correcto
 )
 
 target_link_libraries(VisMol_V20
