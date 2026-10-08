@@ -33,7 +33,7 @@ private:
     void initUi();
     void initMenu();
     void initToolBars();
-    void initAnimationBar();
+    void initAnimacionBar();
     void initDockPanels();
     void initPanelConsola();
     void initStatusBar();

@@ -31,7 +31,7 @@ void MoleculaVista::initUi(){
 
     initMenu();
     initToolBars();
-    initAnimationBar();
+    initAnimacionBar();
     initDockPanels();
     initPanelConsola();
     initStatusBar();
@@ -62,6 +62,7 @@ void MoleculaVista::initMenu(){
 
     menuArchivo->addSeparator();
     m_accionesArchivo.salir = menuArchivo->addAction(tr("Salir"), this, &MoleculaVista::salir, QKeySequence::Quit);
+    m_accionesArchivo.salir->setIcon(QIcon(":/iconos/salir.png"));
 
     QMenu* menuFormatos = menuBarSuperior->addMenu(tr("&Importar/Exportar"));
     m_accionesIO.importarXYZ = menuFormatos->addAction(tr("Importar Coordenadas XYZ (.xyz)"), this, &MoleculaVista::importarXYZ);
@@ -93,13 +94,16 @@ void MoleculaVista::initToolBars(){
 
     m_barraProyecto = addToolBar(tr("Proyecto"));
     m_barraProyecto->setObjectName("barraProyecto");
+    m_barraProyecto->addAction(m_accionesArchivo.salir);
     m_barraProyecto->addAction(m_accionesArchivo.nuevo);
     m_barraProyecto->addAction(m_accionesArchivo.abrir);
     m_barraProyecto->addAction(m_accionesArchivo.guardar);
     m_barraProyecto->addAction(m_accionesArchivo.cerrar);
     m_barraProyecto->addSeparator();
+    m_barraProyecto->addSeparator();
     m_barraProyecto->addAction(m_accionesEdicion.deshacer);
     m_barraProyecto->addAction(m_accionesEdicion.rehacer);
+    m_barraProyecto->addSeparator();
     m_barraProyecto->addSeparator();
     m_barraProyecto->addAction(m_accionesCalculo.configurarMopac);
 
@@ -140,12 +144,13 @@ void MoleculaVista::initToolBars(){
     m_barraElementos->addAction(m_accionesElementos.oxigeno);
     m_barraElementos->addAction(m_accionesElementos.nitrogeno);
     m_barraElementos->addSeparator();
+    m_barraElementos->addSeparator();
+    m_barraElementos->addSeparator();
     m_barraElementos->addAction(m_accionesElementos.modoEnlace);
     m_barraElementos->addAction(m_accionesElementos.modoRotar);
 }
 
-void MoleculaVista::initPanelConsola()
-{
+void MoleculaVista::initPanelConsola(){
     m_panelConsola = new QDockWidget(tr("Monitor de Simulación en Vivo (MOPAC)"), this);
     m_panelConsola->setObjectName("panelConsolaMopac");
     m_panelConsola->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
@@ -165,8 +170,7 @@ void MoleculaVista::initPanelConsola()
     m_panelConsola->setVisible(false);
 }
 
-void MoleculaVista::initAnimationBar()
-{
+void MoleculaVista::initAnimacionBar(){
     m_barraAnimacion = new QToolBar(tr("Control de Trayectoria / Animación"), this);
     m_barraAnimacion->setObjectName("barraAnimacion");
     addToolBar(Qt::BottomToolBarArea, m_barraAnimacion);
@@ -209,8 +213,7 @@ void MoleculaVista::initAnimationBar()
     m_barraAnimacion->setVisible(true);
 }
 
-void MoleculaVista::initDockPanels()
-{
+void MoleculaVista::initDockPanels(){
     m_panelFrecuencias = new QDockWidget(tr("Analizador de Modos Vibracionales (IR)"), this);
     m_panelFrecuencias->setObjectName("panelFrecuencias");
     m_panelFrecuencias->setAllowedAreas(Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
@@ -226,8 +229,7 @@ void MoleculaVista::initDockPanels()
     m_panelFrecuencias->setVisible(true);
 }
 
-void MoleculaVista::initStatusBar()
-{
+void MoleculaVista::initStatusBar(){
     m_barraEstado = new QStatusBar(this);
     setStatusBar(m_barraEstado);
 
@@ -258,15 +260,13 @@ void MoleculaVista::initStatusBar()
     timerReloj->start(1000);
 }
 
-void MoleculaVista::initLienzo()
-{
+void MoleculaVista::initLienzo(){
     QGraphicsView* visorCentral = new QGraphicsView(this);
     visorCentral->setObjectName("visorMolecular");
     setCentralWidget(visorCentral);
 }
 
-void MoleculaVista::initConnect()
-{
+void MoleculaVista::initConnect(){
     connect(m_accionesElementos.carbono, &QAction::triggered, this, [this](){ alSeleccionarElemento("C"); });
     connect(m_accionesElementos.hidrogeno, &QAction::triggered, this, [this](){ alSeleccionarElemento("H"); });
     connect(m_accionesElementos.oxigeno, &QAction::triggered, this, [this](){ alSeleccionarElemento("O"); });
@@ -279,6 +279,7 @@ void MoleculaVista::initConnect()
 
     connect(m_listaFrecuencias, &QListWidget::currentRowChanged, this, &MoleculaVista::alSeleccionarFrecuencia);
 }
+
 // =========================================================================
 // ZONA: PULSACIONES DE MENÚ SUPERIOR (SLOTS)
 // =========================================================================
@@ -292,54 +293,42 @@ void MoleculaVista::exportarMOPAC()   { m_lblEstadoTexto->setText(tr(" Se ha pul
 void MoleculaVista::deshacer()        { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Deshacer")); }
 void MoleculaVista::rehacer()         { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Rehacer")); }
 void MoleculaVista::limpiarLienzo()   { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Limpiar Lienzo")); }
-void MoleculaVista::configurarMopac() { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Configurar MOPAC")); }
-
-void MoleculaVista::mostrarFrecuencias()
-{
-    m_panelFrecuencias->setVisible(!m_panelFrecuencias->isVisible());
-}
-
+void MoleculaVista::configurarMopac() { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Configurar MOPAC"));}
+void MoleculaVista::mostrarFrecuencias(){m_panelFrecuencias->setVisible(!m_panelFrecuencias->isVisible());}
 void MoleculaVista::verLogOut()        { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Ver Log Out")); }
 
 // =========================================================================
 // ZONA: INTERACCIONES Y BOTONERÍA DE INTERFAZ
 // =========================================================================
 
-void MoleculaVista::alSeleccionarElemento(const QString& elemento)
-{
+void MoleculaVista::alSeleccionarElemento(const QString& elemento){
     m_lblEstadoTexto->setText(tr(" Herramienta activa: Dibujando Átomo de %1").arg(elemento));
 }
 
-void MoleculaVista::alActivarModoEnlace()
-{
+void MoleculaVista::alActivarModoEnlace(){
     m_lblEstadoTexto->setText(tr(" Herramienta activa: Modo Enlace Covalente habilitado."));
 }
 
-void MoleculaVista::alActivarModoRotar()
-{
+void MoleculaVista::alActivarModoRotar(){
     m_lblEstadoTexto->setText(tr(" Herramienta activa: Modo Rotación y Vista 3D."));
 }
 
-void MoleculaVista::alAlternarReproduccionAnimacion(bool activado)
-{
+void MoleculaVista::alAlternarReproduccionAnimacion(bool activado){
     m_accionesAnimacion.reproducirPausar->setText(activado ? tr("Pausar") : tr("Reproducir"));
     m_lblEstadoTexto->setText(activado ? tr(" Trayectoria en reproducción...") : tr(" Animación en pausa."));
 }
 
-void MoleculaVista::alCambiarDeslizadorFotograma(int fotograma)
-{
+void MoleculaVista::alCambiarDeslizadorFotograma(int fotograma){
     m_lblFotogramaInfo->setText(tr("Paso: %1 / %2").arg(fotograma).arg(m_deslizadorFotogramas->maximum()));
 }
 
-void MoleculaVista::alSeleccionarFrecuencia(int indice)
-{
+void MoleculaVista::alSeleccionarFrecuencia(int indice){
     if (indice < 0) return;
     QString textoModo = m_listaFrecuencias->item(indice)->text();
     m_lblEstadoTexto->setText(tr(" Visualizando Modo: %1").arg(textoModo));
 }
 
-void MoleculaVista::closeEvent(QCloseEvent *evento)
-{
+void MoleculaVista::closeEvent(QCloseEvent *evento){
     evento->accept();
 }
 
@@ -347,8 +336,8 @@ void MoleculaVista::closeEvent(QCloseEvent *evento)
 // ZONA: GESTIÓN DE HOJAS DE ESTILO (QSS)
 // =========================================================================
 
-void MoleculaVista::setTemaApp()
-{
+void MoleculaVista::setTemaApp(){
+
     QString estilo =
         "QMainWindow { background-color: #1a1a1a; color: #e0e0e0; }"
         "QMenuBar { background-color: #222222; color: #e0e0e0; border-bottom: 1px solid #2d2d2d; }"
@@ -356,7 +345,7 @@ void MoleculaVista::setTemaApp()
         "QMenu { background-color: #222222; color: #e0e0e0; border: 1px solid #333333; }"
         "QMenu::item:selected { background-color: #1e3a8a; color: #ffffff; }"
         "QToolBar { background-color: #222222; border: 1px solid #2d2d2d; spacing: 4px; padding: 4px; }"
-        "QToolBar QToolButton { background-color: #2b2b2b; color: #e0e0e0; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 12px; font-size: 11px; }"
+        "QToolBar QToolButton { background-color: #2b2b2b; color: #e0e0e0; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 12px; font-size: 15px; }"
         "QToolBar QToolButton:hover { background-color: #3a3a3a; border: 1px solid #4a4a4a; color: #ffffff; }"
         "QToolBar QToolButton:checked { background-color: #1e3a8a; border: 1px solid #3b82f6; color: #ffffff; font-weight: bold; }"
         "QToolBar#barraElementos QToolButton { min-width: 120px; text-align: left; }"

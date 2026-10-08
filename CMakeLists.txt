@@ -12,10 +12,14 @@ set(CMAKE_AUTORCC ON)
 qt_add_executable(VisMol_V20
     WIN32 MACOSX_BUNDLE
     main.cpp
-    moleculavista.cpp
     moleculavista.h
+    moleculaview.h
     moleculalienzo.h
+    moleculamat.h
+    moleculavista.cpp
+    moleculaview.cpp
     moleculalienzo.cpp
+    moleculamat.cpp
     iconos.qrc            # Mantener el archivo aquí es correcto
 )
 
