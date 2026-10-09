@@ -62,9 +62,8 @@ signals:
 
     // 4. Señales para ordenar a la Vista que se actualice
     void modoEditorCambiado(MoleculaView::ModoEditor nuevoModo);
-    void atomoAdd(Atomo nuevoAtomo);
-    void enlaceAdd(Enlace nuevoEnlace);
     void modoLienzoCambiado(MoleculaView::ModoLienzo nuevoModo);
+    void actualizarLienzo();
 
 private:
 
@@ -78,8 +77,6 @@ private:
     QVector<Enlace>     m_listaEnlaces;
 
     // 6.- Funciones Privadas solo invocadas por el View
-    void    addNuevoAtomo(const Atomo& nuevoAtomo);
-    void    addNuevoEnlace(const Enlace& nuevoEnlace);
     void    procesarClickDibujoAtomo(const QVector3D& posClick);
     void    procesarClickSeleccion(const QVector3D& posClick);
     void    procesarClickCrearEnlace(const QVector3D& posClick);
@@ -87,6 +84,7 @@ private:
     void    setElementoSeleccionado(int idAtomoSelecccionado);
     void    setModoLienzo(const ModoLienzo& modoLienzo);
     void    limpiarLienzo();
+    int     getIdAtomoFromPos(const QVector3D& pos3D);
 
 };
 

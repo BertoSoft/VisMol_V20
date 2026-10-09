@@ -29,7 +29,13 @@ MoleculaVista::~MoleculaVista() {}
 void MoleculaVista::setMoleculaView(MoleculaView* view){
     if(!view) return;
 
-    m_view = view;
+    m_view = view; // La ventana guarda el cerebro
+
+    // ¡Aquí! La ventana le comparte el cerebro a su lienzo privado de forma limpia
+    if(m_lienzo) {
+        m_lienzo->setMoleculaView(view);
+        connect(m_view, &MoleculaView::actualizarLienzo, m_lienzo, &MoleculaLienzo::actualizarLienzo);
+    }
 
     // Cable 1: Gobierna la salud del documento (Persistencia, Datos, Docks)
     connect(m_view, &MoleculaView::modoLienzoCambiado, this, &MoleculaVista::alCambiarModoLienzo);

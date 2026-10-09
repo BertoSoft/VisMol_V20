@@ -16,6 +16,11 @@ public:
     ~MoleculaLienzo() override;
 
     void setMoleculaView(MoleculaView* view);
+    void actualizarLienzo();
+
+protected:
+
+    void mousePressEvent(QMouseEvent* mouseEv) override;
 
 private:
     QGraphicsScene* m_escena = nullptr; // El espacio infinito donde se colocarán los gráficos

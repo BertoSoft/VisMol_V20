@@ -26,8 +26,6 @@ void MoleculaView::setModoEditor(const ModoEditor& nuevoModo){
     if(getModoEditor() == nuevoModo) return;
 
     m_modoActual = nuevoModo;
-
-    emit modoEditorCambiado(nuevoModo);
 }
 
 void MoleculaView::setElementoActivo(const QString& simbolo){
@@ -46,8 +44,8 @@ void MoleculaView::setNuevoProyecto(){
     modo.estaIniciado   = true;
     modo.estaVacio      = true;
 
+    setModoEditor(ModoSeleccion);
     setModoLienzo(modo);
-
 }
 
 void MoleculaView::setClick(const QVector3D& posClick){
@@ -115,23 +113,24 @@ QString MoleculaView::getSimboloAtomoActivo(){
 // Funciones Privadas de MoleculaView
 //################################################################
 
-void MoleculaView::addNuevoAtomo(const Atomo& nuevoAtomo){
-    m_listaAtomos.append(nuevoAtomo);
-
-    emit atomoAdd(nuevoAtomo);
-}
-
-void MoleculaView::addNuevoEnlace(const Enlace& nuevoEnlace){
-    m_listaEnlaces.append(nuevoEnlace);
-    emit enlaceAdd(nuevoEnlace);
-}
-
 void MoleculaView::setElementoSeleccionado(int idAtomoSeleccionado){
 
 }
 
 void MoleculaView::procesarClickDibujoAtomo(const QVector3D& posClick) {
+    if(getIdAtomoFromPos(posClick) < 0){
+        Atomo nuevoAtomo;
 
+        nuevoAtomo.id       = m_contadorIds++;
+        nuevoAtomo.simbolo  = m_atomoActivo;
+        nuevoAtomo.posicion = posClick;
+
+        // Introducido directamente aquí: Almacenamos en el vector del negocio
+        m_listaAtomos.append(nuevoAtomo);
+
+        // Actualizamos de forma centralizada la salud y estado de la UI
+        setModoLienzo(m_modoLienzo);
+    }
 
 }
 
@@ -163,4 +162,19 @@ void MoleculaView::setModoLienzo(const ModoLienzo& modoLienzo){
     // 4. EMISIÓN ATÓMICA CENTRALIZADA HACIA LA INTERFAZ
     emit modoEditorCambiado(m_modoActual);
     emit modoLienzoCambiado(m_modoLienzo);
+
+    // Le decimos al lienzo: "Las listas de memoria han cambiado, vuelve a pintar"
+    emit actualizarLienzo();
+}
+
+int MoleculaView::getIdAtomoFromPos(const QVector3D& posClick){
+    const float TOLERANCIA = 0.5f;
+
+    for(const Atomo& atomo: m_listaAtomos){
+        float distancia = posClick.distanceToPoint(atomo.posicion);
+        if(distancia <= TOLERANCIA){
+            return atomo.id;
+        }
+    }
+    return -1;
 }
