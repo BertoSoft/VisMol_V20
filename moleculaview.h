@@ -54,9 +54,11 @@ public:
 
 
     // 3. Consultores de estado
-    ModoEditor  getModoEditor();
-    ModoLienzo  getModoLienzo();
-    QString     getSimboloAtomoActivo();
+    ModoEditor          getModoEditor();
+    ModoLienzo          getModoLienzo();
+    QString             getSimboloAtomoActivo();
+    QVector<Atomo>      getListaAtomos();
+    QVector<Enlace>     getListaEnlaces();
 
 signals:
 

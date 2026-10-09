@@ -109,6 +109,14 @@ QString MoleculaView::getSimboloAtomoActivo(){
     return m_atomoActivo;
 }
 
+QVector<Atomo> MoleculaView::getListaAtomos(){
+    return m_listaAtomos;
+}
+
+QVector<Enlace> MoleculaView::getListaEnlaces(){
+    return m_listaEnlaces;
+}
+
 //################################################################
 // Funciones Privadas de MoleculaView
 //################################################################

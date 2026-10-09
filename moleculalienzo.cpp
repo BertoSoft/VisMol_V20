@@ -1,4 +1,5 @@
 #include "moleculalienzo.h"
+#include "moleculaview.h"
 
 #include <QObject>
 #include <QMouseEvent>
@@ -39,9 +40,18 @@ void MoleculaLienzo::setMoleculaView(MoleculaView* view){
 }
 
 void MoleculaLienzo::actualizarLienzo(){
+    if(!m_view) return;
+
+    QVector<Atomo> listaAtomos      = m_view->getListaAtomos();
+    QVector<Enlace> listaEnlaces    = m_view->getListaEnlaces();
+
+    m_escena->clear();
+
+    // Renderizamos los enlaces
 
 
-    // AQui el dibujo de la molecula con getAtomos y getEnlaces
+
+    // Renderizamos los atomos
 
 
 
