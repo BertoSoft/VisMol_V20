@@ -1,10 +1,28 @@
 #ifndef MOLECULALIENZO_H
 #define MOLECULALIENZO_H
 
-class MoleculaLienzo
-{
+#include "moleculaview.h"
+
+#include <QGraphicsScene>
+#include <QGraphicsView>
+
+class MoleculaLienzo : public QGraphicsView{
+
+    Q_OBJECT
+
 public:
-    MoleculaLienzo();
+
+    MoleculaLienzo(QWidget* parent = nullptr);
+    ~MoleculaLienzo() override;
+
+    void setMoleculaView(MoleculaView* view);
+
+private:
+    QGraphicsScene* m_escena = nullptr; // El espacio infinito donde se colocarán los gráficos
+    MoleculaView*   m_view   = nullptr; // Nuestro puente con el negocio de la aplicación
+
 };
+
+
 
 #endif // MOLECULALIENZO_H

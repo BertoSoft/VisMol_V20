@@ -5,7 +5,12 @@
 MoleculaView::MoleculaView(QObject *parent)
     : QObject(parent){
 
-
+    // Estado Inicial, al nacer
+    m_modoActual                = ModoSeleccion;
+    m_modoLienzo.estaVacio      = true;
+    m_modoLienzo.estaGuardado   = false;
+    m_modoLienzo.estaIniciado   = false;
+    m_atomoActivo               = "C";
 }
 
 MoleculaView::~MoleculaView(){
@@ -16,7 +21,7 @@ MoleculaView::~MoleculaView(){
 // Funciones Públicas
 //################################################################
 
-void MoleculaView::setModoEditor(ModoEditor nuevoModo){
+void MoleculaView::setModoEditor(const ModoEditor& nuevoModo){
 
     if(getModoEditor() == nuevoModo) return;
 
@@ -25,22 +30,30 @@ void MoleculaView::setModoEditor(ModoEditor nuevoModo){
     emit modoEditorCambiado(nuevoModo);
 }
 
-void MoleculaView::setElementoActivo(int idNuevoAtomo){
+void MoleculaView::setElementoActivo(const QString& simbolo){
 
-    if(getIdAtomoActivo() == idNuevoAtomo) return;
+    if(getSimboloAtomoActivo() == simbolo) return;
 
-    m_idAtomoActivo = idNuevoAtomo;
-
-    emit atomoActivoCambiado(idNuevoAtomo);
+    m_atomoActivo = simbolo;
 }
 
-void MoleculaView::setClick(QVector3D posClick){
+void MoleculaView::setNuevoProyecto(){
+    limpiarLienzo();
+
+    ModoLienzo modo;
+
+    modo.estaGuardado   = false;
+    modo.estaIniciado   = true;
+    modo.estaVacio      = true;
+
+    setModoLienzo(modo);
+
+}
+
+void MoleculaView::setClick(const QVector3D& posClick){
     switch(m_modoActual) {
     // --- GRUPO 1: MODOS DE DIBUJO DE ÁTOMOS ---
-    case ModoDibujoCarbono:
-    case ModoDibujoHidrogeno:
-    case ModoDibujoNitrogeno:
-    case ModoDibujoOxigeno:
+    case ModoDibujo:
         // Delegamos en una función interna que ya dejamos programada
         procesarClickDibujoAtomo(posClick);
         break;
@@ -70,19 +83,22 @@ void MoleculaView::setClick(QVector3D posClick){
 }
 
 void MoleculaView::limpiarLienzo(){
-
-    // Limpieza absoluta de los almacenes de memoria
+    // Alteración de memoria en silencio
     m_listaAtomos.clear();
     m_listaEnlaces.clear();
-
-    // Reseteamos los estados a sus valores de fábrica
     m_contadorIds   = 0;
-    m_idAtomoActivo = -1;
+
+    m_atomoActivo   = "C";
     m_modoActual    = ModoSeleccion;
 
-    // Emitimos las señales obligatorias para sincronizar la interfaz gráfica
-    emit modoEditorCambiado(m_modoActual);
-    emit atomoActivoCambiado(m_idAtomoActivo);
+    // Reseteo absoluto de la salud del documento
+    ModoLienzo modo;
+
+    modo.estaVacio      = true;
+    modo.estaGuardado   = false;
+    modo.estaIniciado   = false; // Regresa al letargo de espera
+
+    setModoLienzo(modo);
 }
 
 MoleculaView::ModoEditor MoleculaView::getModoEditor(){
@@ -90,9 +106,9 @@ MoleculaView::ModoEditor MoleculaView::getModoEditor(){
     return m_modoActual;
 }
 
-int MoleculaView::getIdAtomoActivo(){
+QString MoleculaView::getSimboloAtomoActivo(){
 
-    return m_idAtomoActivo;
+    return m_atomoActivo;
 }
 
 //################################################################
@@ -110,24 +126,17 @@ void MoleculaView::addNuevoEnlace(const Enlace& nuevoEnlace){
     emit enlaceAdd(nuevoEnlace);
 }
 
+void MoleculaView::setElementoSeleccionado(int idAtomoSeleccionado){
+
+}
+
 void MoleculaView::procesarClickDibujoAtomo(const QVector3D& posClick) {
-    QString simbolo = "";
 
-    // Volvemos a evaluar el modo solo para extraer el símbolo químico exacto
-    switch(m_modoActual) {
-    case ModoDibujoCarbono:   simbolo = "C"; break;
-    case ModoDibujoHidrogeno: simbolo = "H"; break;
-    case ModoDibujoNitrogeno: simbolo = "N"; break;
-    case ModoDibujoOxigeno:   simbolo = "O"; break;
-    default: return;
-    }
 
-    Atomo nuevoAtomo;
-    nuevoAtomo.id       = m_contadorIds++; // Mantenemos tu regla: asigna e incrementa aquí
-    nuevoAtomo.simbolo  = simbolo;
-    nuevoAtomo.posicion = posClick;
+}
 
-    addNuevoAtomo(nuevoAtomo);
+MoleculaView::ModoLienzo MoleculaView::getModoLienzo(){
+    return m_modoLienzo;
 }
 
 void MoleculaView::procesarClickSeleccion(const QVector3D& posClick) {
@@ -137,4 +146,21 @@ void MoleculaView::procesarClickCrearEnlace(const QVector3D& posClick) {
 }
 
 void MoleculaView::procesarClickRotacion(const QVector3D& posClick) {
+}
+
+void MoleculaView::setModoLienzo(const ModoLienzo& modoLienzo){
+    // 1. Calculamos la realidad objetiva de los almacenes de memoria
+    bool vacioAhora = m_listaAtomos.isEmpty() && m_listaEnlaces.isEmpty();
+
+    // 2. Si el lienzo se vacía por completo, la persistencia se apaga de forma obligatoria
+    bool guardadoReal = vacioAhora ? false : modoLienzo.estaGuardado;
+
+    // 3. Asignamos los tres estados en un único rincón controlado
+    m_modoLienzo.estaIniciado = modoLienzo.estaIniciado;
+    m_modoLienzo.estaGuardado = guardadoReal;
+    m_modoLienzo.estaVacio    = vacioAhora;
+
+    // 4. EMISIÓN ATÓMICA CENTRALIZADA HACIA LA INTERFAZ
+    emit modoEditorCambiado(m_modoActual);
+    emit modoLienzoCambiado(m_modoLienzo);
 }

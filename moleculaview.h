@@ -31,52 +31,62 @@ public:
 
     // 1.- Catalogo Limpio de los estado en los que puede estar el editor
     enum ModoEditor{
-        ModoSeleccion,         // Puntero neutro (Mide distancias, activa clic derecho)
-        ModoDibujoCarbono,     // Añadir átomos de C
-        ModoDibujoHidrogeno,   // Añadir átomos de H
-        ModoDibujoOxigeno,     // Añadir átomos de O
-        ModoDibujoNitrogeno,   // Añadir átomos de N
-        ModoCrearEnlace,       // Unir dos átomos
-        ModoRotacion3D         // Rotar la cámara del lienzo
+        ModoSeleccion,      // Puntero neutro (Mide distancias, activa clic derecho)
+        ModoDibujo,         // Modo de adiccion de atomos
+        ModoCrearEnlace,    // Unir dos átomos
+        ModoRotacion3D      // Rotar la cámara del lienzo
+    };
+
+    struct ModoLienzo{
+        bool estaVacio      = true;
+        bool estaGuardado   = false;
+        bool estaIniciado   = false;
     };
 
     explicit MoleculaView(QObject *parent = nullptr);
     ~MoleculaView() override;
 
     // 2. Métodos de control que invocará la Vista al interactuar
-    void setModoEditor(ModoEditor nuevoModo);
-    void setElementoActivo(int idNuevoAtomo);
-    void setClick(QVector3D posClick);
-    void limpiarLienzo();
+    void setModoEditor(const ModoEditor& nuevoModo);
+    void setElementoActivo(const QString& simbolo);
+    void setNuevoProyecto();
+    void setClick(const QVector3D& posClick);
+
 
     // 3. Consultores de estado
     ModoEditor  getModoEditor();
-    int         getIdAtomoActivo();
+    ModoLienzo  getModoLienzo();
+    QString     getSimboloAtomoActivo();
 
 signals:
 
     // 4. Señales para ordenar a la Vista que se actualice
-    void modoEditorCambiado(ModoEditor nuevoModo);
-    void atomoActivoCambiado(int idNuevoAtomo);
+    void modoEditorCambiado(MoleculaView::ModoEditor nuevoModo);
     void atomoAdd(Atomo nuevoAtomo);
     void enlaceAdd(Enlace nuevoEnlace);
+    void modoLienzoCambiado(MoleculaView::ModoLienzo nuevoModo);
 
 private:
 
     // 5. Estado interno privado (El cerebro)
-    ModoEditor          m_modoActual        = ModoEditor::ModoSeleccion;
-    int                 m_contadorIds       = 0;
-    int                 m_idAtomoActivo     = -1;
+    ModoEditor          m_modoActual            = ModoEditor::ModoSeleccion;
+    ModoLienzo          m_modoLienzo;
+    int                 m_contadorIds           = 0;
+    QString             m_atomoActivo           = "";
+    int                 m_idAtomoSeleccionado   = -1;
     QVector<Atomo>      m_listaAtomos;
     QVector<Enlace>     m_listaEnlaces;
 
     // 6.- Funciones Privadas solo invocadas por el View
-    void addNuevoAtomo(const Atomo& nuevoAtomo);
-    void addNuevoEnlace(const Enlace& nuevoEnlace);
-    void procesarClickDibujoAtomo(const QVector3D& posClick);
-    void procesarClickSeleccion(const QVector3D& posClick);
-    void procesarClickCrearEnlace(const QVector3D& posClick);
-    void procesarClickRotacion(const QVector3D& posClick);
+    void    addNuevoAtomo(const Atomo& nuevoAtomo);
+    void    addNuevoEnlace(const Enlace& nuevoEnlace);
+    void    procesarClickDibujoAtomo(const QVector3D& posClick);
+    void    procesarClickSeleccion(const QVector3D& posClick);
+    void    procesarClickCrearEnlace(const QVector3D& posClick);
+    void    procesarClickRotacion(const QVector3D& posClick);
+    void    setElementoSeleccionado(int idAtomoSelecccionado);
+    void    setModoLienzo(const ModoLienzo& modoLienzo);
+    void    limpiarLienzo();
 
 };
 

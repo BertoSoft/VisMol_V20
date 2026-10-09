@@ -2,6 +2,7 @@
 #define MOLECULAVISTA_H
 
 #include "moleculalienzo.h"
+#include "moleculaview.h"
 
 #include <QMainWindow>
 #include <QAction>
@@ -25,6 +26,9 @@ public:
     ~MoleculaVista() override;
 
     const QString NOMBRE_APP = "VisMol V 2.0";
+
+    // Funciones Públicas
+    void setMoleculaView(MoleculaView* view);
 
 private:
     // =========================================================================
@@ -61,7 +65,10 @@ private slots:
     // =========================================================================
     // BLOQUE: GESTIÓN DE BOTONERÍA Y CONTROLES INTERNOS DE INTERFAZ
     // =========================================================================
+    void alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLienzo);
+    void alCambiarModoEditor(const MoleculaView::ModoEditor& modoEditor);
     void alSeleccionarElemento(const QString& elemento);
+    void alActivarModoSeleccion();
     void alActivarModoEnlace();
     void alActivarModoRotar();
     void alAlternarReproduccionAnimacion(bool activado);
@@ -69,6 +76,10 @@ private slots:
     void alSeleccionarFrecuencia(int indice);
 
 protected:
+    // =========================================================================
+    // ZONA: EVENTOS PROTEGIDOS DEL SISTEMA OPERATIVO
+    // =========================================================================
+
     void closeEvent(QCloseEvent *evento) override;
 
 private:
@@ -103,12 +114,13 @@ private:
     } m_accionesAnalisis;
 
     struct AccionesElementos {
-        QAction* carbono    = nullptr;
-        QAction* hidrogeno  = nullptr;
-        QAction* oxigeno    = nullptr;
-        QAction* nitrogeno  = nullptr;
-        QAction* modoEnlace = nullptr;
-        QAction* modoRotar  = nullptr;
+        QAction* carbono        = nullptr;
+        QAction* hidrogeno      = nullptr;
+        QAction* oxigeno        = nullptr;
+        QAction* nitrogeno      = nullptr;
+        QAction* modoSeleccion  = nullptr;
+        QAction* modoEnlace     = nullptr;
+        QAction* modoRotar      = nullptr;
     } m_accionesElementos;
 
     struct AccionesAnimacion {
@@ -131,12 +143,12 @@ private:
     QSlider*       m_deslizadorFotogramas = nullptr;
     QLabel*        m_lblFotogramaInfo     = nullptr;
 
-    QDockWidget*   m_panelFrecuencias     = nullptr;
-    QDockWidget*   m_panelConsola        = nullptr;
-    QTextEdit*     m_textoConsola        = nullptr;
-    QListWidget*   m_listaFrecuencias     = nullptr;
+    QDockWidget*   m_panelFrecuencias   = nullptr;
+    QDockWidget*   m_panelConsola       = nullptr;
+    QTextEdit*     m_textoConsola       = nullptr;
+    QListWidget*   m_listaFrecuencias   = nullptr;
 
-    MoleculaLienzo* m_lienzo              = nullptr;
-    MoleculaView*   m_negocio             = nullptr;
+    MoleculaLienzo* m_lienzo            = nullptr;
+    MoleculaView*   m_view              = nullptr;
 };
 #endif // MOLECULAVISTA_H

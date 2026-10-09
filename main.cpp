@@ -5,7 +5,11 @@
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
-    MoleculaVista w;
-    w.showMaximized();
+    MoleculaVista* vista    = new MoleculaVista();
+    MoleculaView* view      = new MoleculaView();
+
+    vista->setMoleculaView(view);
+    vista->showMaximized();
+
     return QApplication::exec();
 }

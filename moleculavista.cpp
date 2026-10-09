@@ -1,4 +1,5 @@
 #include "moleculavista.h"
+#include "moleculaview.h"
 
 #include <QMenu>
 #include <QMenuBar>
@@ -20,6 +21,22 @@ MoleculaVista::MoleculaVista(QWidget *parent)
 }
 
 MoleculaVista::~MoleculaVista() {}
+
+//#########################################################################
+// Zona de Funciones Públicas
+//########################################################################
+
+void MoleculaVista::setMoleculaView(MoleculaView* view){
+    if(!view) return;
+
+    m_view = view;
+
+    // Cable 1: Gobierna la salud del documento (Persistencia, Datos, Docks)
+    connect(m_view, &MoleculaView::modoLienzoCambiado, this, &MoleculaVista::alCambiarModoLienzo);
+
+    // Cable 2: Gobierna la herramienta del ratón (Textos informativos de acción)
+    connect(m_view, &MoleculaView::modoEditorCambiado, this, &MoleculaVista::alCambiarModoEditor);
+}
 
 // =========================================================================
 // ZONA: INICIALIZACIONES DE INTERFAZ DE USUARIO (init)
@@ -46,22 +63,21 @@ void MoleculaVista::initMenu(){
 
     QMenu* menuArchivo = menuBarSuperior->addMenu(tr("&Archivo"));
 
-    // Asignación de Iconos desde el archivo de recursos (.qrc)
-    m_accionesArchivo.nuevo = menuArchivo->addAction(tr("Nuevo Proyecto"), this, &MoleculaVista::nuevoProyecto, QKeySequence::New);
+    // CORREGIDO: El atajo de teclado pasa a ser el segundo argumento, antes de 'this'
+    m_accionesArchivo.nuevo = menuArchivo->addAction(tr("Nuevo Proyecto"), QKeySequence::New, this, &MoleculaVista::nuevoProyecto);
     m_accionesArchivo.nuevo->setIcon(QIcon(":/iconos/nuevo.png"));
 
-    m_accionesArchivo.abrir = menuArchivo->addAction(tr("Abrir Proyecto (.json)"), this, &MoleculaVista::abrirProyecto, QKeySequence::Open);
+    m_accionesArchivo.abrir = menuArchivo->addAction(tr("Abrir Proyecto (.json)"), QKeySequence::Open, this, &MoleculaVista::abrirProyecto);
     m_accionesArchivo.abrir->setIcon(QIcon(":/iconos/abrir.png"));
 
-    // Nueva acción solicitada: Cerrar Proyecto (puedes enlazarla a un slot como &MoleculaVista::cerrarProyecto)
-    m_accionesArchivo.cerrar = menuArchivo->addAction(tr("Cerrar Proyecto"), this, &MoleculaVista::limpiarLienzo, QKeySequence::Close);
-    m_accionesArchivo.cerrar->setIcon(QIcon(":/iconos/cerrar.png")); // Asegúrate de tener este icono
+    m_accionesArchivo.cerrar = menuArchivo->addAction(tr("Cerrar Proyecto"), QKeySequence::Close, this, &MoleculaVista::limpiarLienzo);
+    m_accionesArchivo.cerrar->setIcon(QIcon(":/iconos/cerrar.png"));
 
-    m_accionesArchivo.guardar = menuArchivo->addAction(tr("Guardar Proyecto (.json)"), this, &MoleculaVista::guardarProyecto, QKeySequence::Save);
+    m_accionesArchivo.guardar = menuArchivo->addAction(tr("Guardar Proyecto (.json)"), QKeySequence::Save, this, &MoleculaVista::guardarProyecto);
     m_accionesArchivo.guardar->setIcon(QIcon(":/iconos/guardar.png"));
 
     menuArchivo->addSeparator();
-    m_accionesArchivo.salir = menuArchivo->addAction(tr("Salir"), this, &MoleculaVista::salir, QKeySequence::Quit);
+    m_accionesArchivo.salir = menuArchivo->addAction(tr("Salir"), QKeySequence::Quit, this, &MoleculaVista::salir);
     m_accionesArchivo.salir->setIcon(QIcon(":/iconos/salir.png"));
 
     QMenu* menuFormatos = menuBarSuperior->addMenu(tr("&Importar/Exportar"));
@@ -69,10 +85,10 @@ void MoleculaVista::initMenu(){
     m_accionesIO.exportarMOPAC = menuFormatos->addAction(tr("Exportar Entrada MOPAC (.mop)"), this, &MoleculaVista::exportarMOPAC);
 
     QMenu* menuEdicion = menuBarSuperior->addMenu(tr("&Edición"));
-    m_accionesEdicion.deshacer = menuEdicion->addAction(tr("Deshacer"), this, &MoleculaVista::deshacer, QKeySequence::Undo);
+    m_accionesEdicion.deshacer = menuEdicion->addAction(tr("Deshacer"), QKeySequence::Undo, this, &MoleculaVista::deshacer);
     m_accionesEdicion.deshacer->setIcon(QIcon(":/iconos/deshacer.png"));
 
-    m_accionesEdicion.rehacer = menuEdicion->addAction(tr("Rehacer"), this, &MoleculaVista::rehacer, QKeySequence::Redo);
+    m_accionesEdicion.rehacer = menuEdicion->addAction(tr("Rehacer"), QKeySequence::Redo, this, &MoleculaVista::rehacer);
     m_accionesEdicion.rehacer->setIcon(QIcon(":/iconos/rehacer.png"));
 
     menuEdicion->addSeparator();
@@ -115,7 +131,6 @@ void MoleculaVista::initToolBars(){
 
     m_accionesElementos.carbono = new QAction(tr("Carbono (C)"), this);
     m_accionesElementos.carbono->setCheckable(true);
-    m_accionesElementos.carbono->setChecked(true);
 
     m_accionesElementos.hidrogeno = new QAction(tr("Hidrógeno (H)"), this);
     m_accionesElementos.hidrogeno->setCheckable(true);
@@ -125,6 +140,9 @@ void MoleculaVista::initToolBars(){
 
     m_accionesElementos.nitrogeno = new QAction(tr("Nitrógeno (N)"), this);
     m_accionesElementos.nitrogeno->setCheckable(true);
+
+    m_accionesElementos.modoSeleccion = new QAction(tr("Seleccionar / Puntero"), this);
+    m_accionesElementos.modoSeleccion->setCheckable(true);
 
     m_accionesElementos.modoEnlace = new QAction(tr("Crear Enlace"), this);
     m_accionesElementos.modoEnlace->setCheckable(true);
@@ -137,6 +155,7 @@ void MoleculaVista::initToolBars(){
     m_grupoElementos->addAction(m_accionesElementos.hidrogeno);
     m_grupoElementos->addAction(m_accionesElementos.oxigeno);
     m_grupoElementos->addAction(m_accionesElementos.nitrogeno);
+    m_grupoElementos->addAction(m_accionesElementos.modoSeleccion);
     m_grupoElementos->addAction(m_accionesElementos.modoEnlace);
     m_grupoElementos->addAction(m_accionesElementos.modoRotar);
     m_grupoElementos->setExclusive(true);
@@ -148,6 +167,7 @@ void MoleculaVista::initToolBars(){
     m_barraElementos->addSeparator();
     m_barraElementos->addSeparator();
     m_barraElementos->addSeparator();
+    m_barraElementos->addAction(m_accionesElementos.modoSeleccion);
     m_barraElementos->addAction(m_accionesElementos.modoEnlace);
     m_barraElementos->addAction(m_accionesElementos.modoRotar);
 }
@@ -168,8 +188,6 @@ void MoleculaVista::initPanelConsola(){
     m_panelConsola->setWidget(m_textoConsola);
     addDockWidget(Qt::BottomDockWidgetArea, m_panelConsola);
 
-    // Por diseño de UI limpia, se inicia oculto hasta que empiece el cálculo
-    m_panelConsola->setVisible(false);
 }
 
 void MoleculaVista::initAnimacionBar(){
@@ -211,8 +229,6 @@ void MoleculaVista::initAnimacionBar(){
     QWidget* espaciadorDerecho = new QWidget(this);
     espaciadorDerecho->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     m_barraAnimacion->addWidget(espaciadorDerecho);
-
-    m_barraAnimacion->setVisible(true);
 }
 
 void MoleculaVista::initDockPanels(){
@@ -228,7 +244,6 @@ void MoleculaVista::initDockPanels(){
 
     m_panelFrecuencias->setWidget(m_listaFrecuencias);
     addDockWidget(Qt::RightDockWidgetArea, m_panelFrecuencias);
-    m_panelFrecuencias->setVisible(true);
 }
 
 void MoleculaVista::initStatusBar(){
@@ -263,9 +278,14 @@ void MoleculaVista::initStatusBar(){
 }
 
 void MoleculaVista::initLienzo(){
-    QGraphicsView* visorCentral = new QGraphicsView(this);
-    visorCentral->setObjectName("visorMolecular");
-    setCentralWidget(visorCentral);
+    // Instanciamos tu clase personalizada pasando 'this' como padre visual
+    m_lienzo = new MoleculaLienzo(this);
+
+    // Le asignamos el nombre de objeto para que la hoja de estilos QSS lo pinte de negro
+    m_lienzo->setObjectName("visorMolecular");
+
+    // Lo colocamos de forma oficial en el centro de la pantalla
+    setCentralWidget(m_lienzo);
 }
 
 void MoleculaVista::initConnect(){
@@ -273,6 +293,7 @@ void MoleculaVista::initConnect(){
     connect(m_accionesElementos.hidrogeno, &QAction::triggered, this, [this](){ alSeleccionarElemento("H"); });
     connect(m_accionesElementos.oxigeno, &QAction::triggered, this, [this](){ alSeleccionarElemento("O"); });
     connect(m_accionesElementos.nitrogeno, &QAction::triggered, this, [this](){ alSeleccionarElemento("N"); });
+    connect(m_accionesElementos.modoSeleccion, &QAction::triggered, this, &MoleculaVista::alActivarModoSeleccion);
     connect(m_accionesElementos.modoEnlace, &QAction::triggered, this, &MoleculaVista::alActivarModoEnlace);
     connect(m_accionesElementos.modoRotar, &QAction::triggered, this, &MoleculaVista::alActivarModoRotar);
 
@@ -280,44 +301,148 @@ void MoleculaVista::initConnect(){
     connect(m_deslizadorFotogramas, &QSlider::valueChanged, this, &MoleculaVista::alCambiarDeslizadorFotograma);
 
     connect(m_listaFrecuencias, &QListWidget::currentRowChanged, this, &MoleculaVista::alSeleccionarFrecuencia);
+
+    // Iniciamos los valores de Fabrica
+    MoleculaView::ModoLienzo modo;
+
+    modo.estaVacio      = true;
+    modo.estaGuardado   = false;
+
+    alCambiarModoLienzo(modo);
+    alActivarModoSeleccion();
 }
 
 // =========================================================================
 // ZONA: PULSACIONES DE MENÚ SUPERIOR (SLOTS)
 // =========================================================================
 
-void MoleculaVista::nuevoProyecto()   { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Nuevo Proyecto")); }
-void MoleculaVista::abrirProyecto()   { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Abrir Proyecto")); }
-void MoleculaVista::guardarProyecto() { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Guardar Proyecto")); }
+void MoleculaVista::nuevoProyecto()   {m_view->setNuevoProyecto();}
+void MoleculaVista::abrirProyecto()   {}
+void MoleculaVista::guardarProyecto() {}
 void MoleculaVista::salir()           { this->close(); }
-void MoleculaVista::importarXYZ()     { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Importar XYZ")); }
-void MoleculaVista::exportarMOPAC()   { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Exportar MOPAC")); }
-void MoleculaVista::deshacer()        { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Deshacer")); }
-void MoleculaVista::rehacer()         { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Rehacer")); }
-void MoleculaVista::limpiarLienzo()   { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Limpiar Lienzo")); }
-void MoleculaVista::configurarMopac() { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Configurar MOPAC"));}
-void MoleculaVista::mostrarFrecuencias(){m_panelFrecuencias->setVisible(!m_panelFrecuencias->isVisible());}
-void MoleculaVista::verLogOut()        { m_lblEstadoTexto->setText(tr(" Se ha pulsado: Ver Log Out")); }
+void MoleculaVista::importarXYZ()     {}
+void MoleculaVista::exportarMOPAC()   {}
+void MoleculaVista::deshacer()        {}
+void MoleculaVista::rehacer()         {}
+void MoleculaVista::limpiarLienzo()   {}
+void MoleculaVista::configurarMopac() {}
+void MoleculaVista::mostrarFrecuencias(){}
+void MoleculaVista::verLogOut()        {}
 
 // =========================================================================
 // ZONA: INTERACCIONES Y BOTONERÍA DE INTERFAZ
 // =========================================================================
 
+void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLienzo){
+    // =========================================================================
+    // REGLA 1: GESTIÓN DE LA BARRA DE HERRAMIENTAS LATERAL (FÁBRICA)
+    // =========================================================================
+    // La barra de elementos se enciende única y exclusivamente si hay un proyecto activo
+    m_barraElementos->setEnabled(modoLienzo.estaIniciado);
+
+    // =========================================================================
+    // REGLA 2: CONTROL POR CONTENIDO (estaVacio) - DISPONIBILIDAD DE ACTIONS
+    // =========================================================================
+    m_accionesArchivo.cerrar->setEnabled(!modoLienzo.estaVacio);
+    m_accionesEdicion.limpiarLienzo->setEnabled(!modoLienzo.estaVacio);
+    m_accionesIO.exportarMOPAC->setEnabled(!modoLienzo.estaVacio);
+    m_accionesCalculo.configurarMopac->setEnabled(!modoLienzo.estaVacio);
+    m_accionesEdicion.deshacer->setEnabled(!modoLienzo.estaVacio);
+    m_accionesEdicion.rehacer->setEnabled(!modoLienzo.estaVacio);
+    m_accionesElementos.modoEnlace->setEnabled(!modoLienzo.estaVacio);
+    m_accionesElementos.modoRotar->setEnabled(!modoLienzo.estaVacio);
+    m_accionesAnalisis.mostrarFreq->setEnabled(!modoLienzo.estaVacio);
+    m_accionesAnalisis.mostrarConsola->setEnabled(!modoLienzo.estaVacio);
+    m_accionesAnalisis.verLogOut->setEnabled(!modoLienzo.estaVacio);
+
+    // =========================================================================
+    // REGLA 3: CONTROL DE INTERFACES ACOPLABLES Y BARRA DE ESTADO (TEXTO)
+    // =========================================================================
+    if (modoLienzo.estaVacio) {
+        m_panelFrecuencias->setVisible(false);
+        m_panelConsola->setVisible(false);
+        m_barraAnimacion->setVisible(false);
+    }
+
+    // =========================================================================
+    // REGLA 4: CONTROL POR PERSISTENCIA (estaGuardado)
+    // =========================================================================
+    m_accionesArchivo.guardar->setEnabled(!modoLienzo.estaGuardado && !modoLienzo.estaVacio);
+
+    // =========================================================================
+    // REGLA 5: TÍTULO DINÁMICO DE LA VENTANA
+    // =========================================================================
+    if (modoLienzo.estaVacio) {
+        setWindowTitle(NOMBRE_APP);
+    } else if (modoLienzo.estaGuardado) {
+        setWindowTitle(NOMBRE_APP + tr(" - Proyecto Guardado"));
+    } else {
+        setWindowTitle(NOMBRE_APP + tr(" - Proyecto Actual* (Cambios sin guardar)"));
+    }
+}
+
+void MoleculaVista::alCambiarModoEditor(const MoleculaView::ModoEditor& modoEditor){
+    if (!m_view) return;
+
+    // Extraemos el estado del lienzo de forma síncrona
+    MoleculaView::ModoLienzo lienzo = m_view->getModoLienzo();
+
+    // CASO CRÍTICO: Si el proyecto NO está iniciado, fijamos el texto de bloqueo absoluto
+    if (!lienzo.estaIniciado) {
+        m_lblEstadoTexto->setText(tr(" Proyecto Vacío. Cree un nuevo lienzo o abra un archivo para comenzar."));
+        return;
+    }
+
+    // CASO NORMAL: El proyecto está activo, sincronizamos texto y botones hundidos (Checked)
+    switch(modoEditor) {
+    case MoleculaView::ModoSeleccion:
+        m_lblEstadoTexto->setText(tr(" Herramienta activa: Modo Seleccion (Puntero Neutro)."));
+        m_accionesElementos.modoSeleccion->setChecked(true);
+        break;
+
+    case MoleculaView::ModoDibujo:
+        m_lblEstadoTexto->setText(tr(" Herramienta activa: Dibujando Átomo de %1.").arg(m_view->getSimboloAtomoActivo()));
+
+        // Sincronización del botón de elemento químico activo
+        if (m_view->getSimboloAtomoActivo() == "C") m_accionesElementos.carbono->setChecked(true);
+        else if (m_view->getSimboloAtomoActivo() == "H") m_accionesElementos.hidrogeno->setChecked(true);
+        else if (m_view->getSimboloAtomoActivo() == "O") m_accionesElementos.oxigeno->setChecked(true);
+        else if (m_view->getSimboloAtomoActivo() == "N") m_accionesElementos.nitrogeno->setChecked(true);
+        break;
+
+    case MoleculaView::ModoCrearEnlace:
+        m_lblEstadoTexto->setText(tr(" Herramienta activa: Modo Enlace Covalente habilitado."));
+        m_accionesElementos.modoEnlace->setChecked(true);
+        break;
+
+    case MoleculaView::ModoRotacion3D:
+        m_lblEstadoTexto->setText(tr(" Herramienta activa: Modo Rotación y Vista 3D."));
+        m_accionesElementos.modoRotar->setChecked(true);
+        break;
+    }
+}
+
 void MoleculaVista::alSeleccionarElemento(const QString& elemento){
-    m_lblEstadoTexto->setText(tr(" Herramienta activa: Dibujando Átomo de %1").arg(elemento));
+    if(m_view){
+        m_view->setElementoActivo(elemento);
+        m_view->setModoEditor(MoleculaView::ModoDibujo);
+    }
+}
+
+void MoleculaVista::alActivarModoSeleccion(){
+    if(m_view) m_view->setModoEditor(MoleculaView::ModoSeleccion);
 }
 
 void MoleculaVista::alActivarModoEnlace(){
-    m_lblEstadoTexto->setText(tr(" Herramienta activa: Modo Enlace Covalente habilitado."));
+    if(m_view) m_view->setModoEditor(MoleculaView::ModoCrearEnlace);
 }
 
 void MoleculaVista::alActivarModoRotar(){
-    m_lblEstadoTexto->setText(tr(" Herramienta activa: Modo Rotación y Vista 3D."));
+    if(m_view) m_view->setModoEditor(MoleculaView::ModoRotacion3D);
 }
 
 void MoleculaVista::alAlternarReproduccionAnimacion(bool activado){
     m_accionesAnimacion.reproducirPausar->setText(activado ? tr("Pausar") : tr("Reproducir"));
-    m_lblEstadoTexto->setText(activado ? tr(" Trayectoria en reproducción...") : tr(" Animación en pausa."));
 }
 
 void MoleculaVista::alCambiarDeslizadorFotograma(int fotograma){
@@ -327,11 +452,45 @@ void MoleculaVista::alCambiarDeslizadorFotograma(int fotograma){
 void MoleculaVista::alSeleccionarFrecuencia(int indice){
     if (indice < 0) return;
     QString textoModo = m_listaFrecuencias->item(indice)->text();
-    m_lblEstadoTexto->setText(tr(" Visualizando Modo: %1").arg(textoModo));
 }
 
+
+
+// =========================================================================
+// ZONA: EVENTOS PROTEGIDOS DEL SISTEMA OPERATIVO
+// =========================================================================
 void MoleculaVista::closeEvent(QCloseEvent *evento){
-    evento->accept();
+    if(m_view){
+        MoleculaView::ModoLienzo  modoLienzo = m_view->getModoLienzo();
+
+        if(!modoLienzo.estaGuardado && !modoLienzo.estaVacio){
+            QMessageBox::StandardButton respuesta;
+            respuesta = QMessageBox::warning(
+                this,
+                tr("Salir de VisMol"),
+                tr("El proyecto actual tiene cambios sin guardar.\n ¿Desea guardarlos antes de salir?"),
+                QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel
+                );
+
+            if(respuesta == QMessageBox::Save){
+                guardarProyecto();
+                evento->accept();
+                return;
+            }
+            else if(respuesta == QMessageBox::Discard){
+                evento->accept();
+                return;
+            }
+            else{
+                evento->ignore();
+                return;
+            }
+        }
+    }
+    else{
+        evento->accept();
+    }
+
 }
 
 // =========================================================================
@@ -489,14 +648,14 @@ void MoleculaVista::setTemaApp(){
         "   font-size: 13px; "
         "   color: #cccccc; "
         "   padding: 4px 12px; "
-        "   background-color: #101010; " // Fondo interior más oscuro para simular el hueco
-        "   /* Bordes simulados para potenciar el efecto Sunken (Hundido) */"
-        "   border-top: 1px solid #080808; "    // Sombra superior interna
-        "   border-left: 1px solid #080808; "   // Sombra izquierda interna
-        "   border-bottom: 1px solid #2a2a2a; " // Brillo inferior (reflejo del borde)
-        "   border-right: 1px solid #2a2a2a; "  // Brillo derecho
+        "   background-color: #101010; " /* Fondo interior más oscuro para simular el hueco */
+            /* Bordes simulados para potenciar el efecto Sunken (Hundido) */
+        "   border-top: 1px solid #080808; "    /* Sombra superior interna */
+        "   border-left: 1px solid #080808; "   /* Sombra izquierda interna */
+        "   border-bottom: 1px solid #2a2a2a; " /* Brillo inferior (reflejo del borde) */
+        "   border-right: 1px solid #2a2a2a; "  /* Brillo derecho */
         "   border-radius: 2px; "
-        "   margin-right: 4px; " // Separación elegante entre los cuadros
+        "   margin-right: 4px; " /* Separación elegante entre los cuadros */
         "}"
 
         // Consola de Simulación
