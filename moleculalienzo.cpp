@@ -7,6 +7,7 @@
 #include <QGraphicsEllipseItem>
 #include <QColor>
 #include <QGraphicsSimpleTextItem>
+#include <QtMath> // Requerido para qSqrt()
 
 MoleculaLienzo::MoleculaLienzo(QWidget* parent)
     : QGraphicsView(parent){
@@ -54,9 +55,13 @@ void MoleculaLienzo::actualizarLienzo(){
     // =========================================================================
     // 1. RENDERIZAMOS LOS ENLACES (LÍNEAS)
     // ==========================================================================
-    QPen penEnlaces(QColor("#aaaaaa"));
-    penEnlaces.setWidthF(0.15f);
+    // Un gris claro suave (#D1D5DB) es mucho menos agresivo que el blanco puro sobre fondo oscuro
+    QPen penEnlaces(QColor("#D1D5DB"));
+    penEnlaces.setWidthF(3.0f);
     penEnlaces.setCapStyle(Qt::RoundCap);
+
+    // Distancia de separación física en píxeles/unidades entre las líneas paralelas
+    const qreal offsetDist = 8.0;
 
     for(const Enlace &enlace: listaEnlaces){
         QVector3D   posOrigen;
@@ -78,27 +83,63 @@ void MoleculaLienzo::actualizarLienzo(){
             }
         }
         if(origenEncontrado && destinoEncontrado){
-            QGraphicsLineItem* linea = m_escena->addLine(
-                posOrigen.x(),
-                posOrigen.y(),
-                posDestino.x(),
-                posDestino.y(),
-                penEnlaces
-                );
-            linea->setZValue(0);
+            // Coordenadas base
+            qreal x1 = posOrigen.x();
+            qreal y1 = posOrigen.y();
+            qreal x2 = posDestino.x();
+            qreal y2 = posDestino.y();
+
+            // Calculamos el vector de dirección del enlace (Dx, Dy)
+            qreal dx = x2 - x1;
+            qreal dy = y2 - y1;
+            qreal longitud = qSqrt(dx * dx + dy * dy);
+
+            // Evitamos divisiones por cero si los átomos están superpuestos
+            if (longitud < 0.001) continue;
+
+            // Vector unitario perpendicular (Normalizado)
+            qreal px = -dy / longitud;
+            qreal py = dx / longitud;
+
+            // Dibujamos según el orden del enlace químico
+            if (enlace.orden == 1) {
+                // --- Enlace Simple: Una única línea central ---
+                QGraphicsLineItem* linea = m_escena->addLine(x1, y1, x2, y2, penEnlaces);
+                linea->setZValue(0);
+            }
+            else if (enlace.orden == 2) {
+                // --- Enlace Doble: Dos líneas desplazadas simétricamente a los lados ---
+                qreal ox = px * (offsetDist / 2.0);
+                qreal oy = py * (offsetDist / 2.0);
+
+                QGraphicsLineItem* l1 = m_escena->addLine(x1 + ox, y1 + oy, x2 + ox, y2 + oy, penEnlaces);
+                QGraphicsLineItem* l2 = m_escena->addLine(x1 - ox, y1 - oy, x2 - ox, y2 - oy, penEnlaces);
+                l1->setZValue(0);
+                l2->setZValue(0);
+            }
+            else if (enlace.orden >= 3) {
+                // --- Enlace Triple: Una línea central y dos líneas a los extremos exteriores ---
+                qreal ox = px * offsetDist;
+                qreal oy = py * offsetDist;
+
+                QGraphicsLineItem* l_centro = m_escena->addLine(x1, y1, x2, y2, penEnlaces);
+                QGraphicsLineItem* l_izq    = m_escena->addLine(x1 + ox, y1 + oy, x2 + ox, y2 + oy, penEnlaces);
+                QGraphicsLineItem* l_der    = m_escena->addLine(x1 - ox, y1 - oy, x2 - ox, y2 - oy, penEnlaces);
+                l_centro->setZValue(0);
+                l_izq->setZValue(0);
+                l_der->setZValue(0);
+            }
         }
     }
 
     // =========================================================================
-    // 1. RENDERIZAMOS LOS ATOMOS (ELIPSES)
+    // 2. RENDERIZAMOS LOS ATOMOS (ELIPSES Y CONTRASTE DE TEXTO)
     // ==========================================================================
 
     for(const Atomo &atomo: listaAtomos){
         qreal   radio   = getRadioFromAtomo(atomo);
         QColor  color   = getColorFromAtomo(atomo);
 
-        // QGraphicsEllipseItem se dibuja desde la esquina superior izquierda de su contenedor rectangular.
-        // Restamos el radio a la posición (x, y) para centrar el átomo en su coordenada exacta.
         qreal x         = atomo.posicion.x() - radio;
         qreal y         = atomo.posicion.y() - radio;
         qreal diametro  = radio * 2.0f;
@@ -111,10 +152,25 @@ void MoleculaLienzo::actualizarLienzo(){
             );
 
         elipse->setBrush(QColor(color));
-        elipse->setPen(QPen(Qt::black, 0.05f));
+
+        // Bordes oscuros muy sutiles pero definidos para separar el átomo de los enlaces traseros
+        elipse->setPen(QPen(QColor("#1F2937"), 1.5f));
         elipse->setZValue(1);
 
+        // Renderizado del Símbolo Químico con tipografía unificada y limpia
         QGraphicsSimpleTextItem* texto = m_escena->addSimpleText(atomo.simbolo);
+
+        QFont fuenteApp("Segoe UI", 12, QFont::Bold);
+        fuenteApp.setStyleHint(QFont::SansSerif);
+        texto->setFont(fuenteApp);
+
+        // Control dinámico de legibilidad: texto negro para fondos muy claros (H, S, P, Halógenos), blanco para el resto
+        if (atomo.simbolo == "H" || atomo.simbolo == "S" || atomo.simbolo == "P" || atomo.simbolo == "F" || atomo.simbolo == "Cl") {
+            texto->setBrush(QColor("#111827")); // Gris casi negro
+        } else {
+            texto->setBrush(QColor("#FFFFFF")); // Blanco puro
+        }
+
         QRectF contornoTexto = texto->boundingRect();
         texto->setPos(
             atomo.posicion.x() - (contornoTexto.width() / 2),
@@ -126,7 +182,7 @@ void MoleculaLienzo::actualizarLienzo(){
 }
 
 //##############################################################################################
-// Funciones Protegidas SObreescritas
+// Funciones Protegidas Sobreescritas
 //#############################################################################################
 
 void MoleculaLienzo::mousePressEvent(QMouseEvent* mouseEv){
@@ -149,21 +205,21 @@ void MoleculaLienzo::mousePressEvent(QMouseEvent* mouseEv){
 //#############################################################################################
 
 qreal MoleculaLienzo::getRadioFromAtomo(const Atomo& atomo){
-    // Proporciones basadas en radios atómicos relativos (escalados para pantalla)
-    if (atomo.simbolo == "C") return 36; // Carbono estándar
-    if (atomo.simbolo == "H") return 24; // Hidrógeno (más pequeño)
-    if (atomo.simbolo == "O") return 32; // Oxígeno
-    if (atomo.simbolo == "N") return 34; // Nitrógeno
+    if (atomo.simbolo == "C") return 36;
+    if (atomo.simbolo == "H") return 24;
+    if (atomo.simbolo == "O") return 32;
+    if (atomo.simbolo == "N") return 34;
     return 15;
 }
 
 QColor MoleculaLienzo::getColorFromAtomo(const Atomo& atomo){
-    if (atomo.simbolo == "H")  return Qt::white;
-    if (atomo.simbolo == "C")  return Qt::darkGray;
-    if (atomo.simbolo == "O")  return Qt::red;
-    if (atomo.simbolo == "N")  return Qt::blue;
-    if (atomo.simbolo == "S")  return Qt::yellow;
-    if (atomo.simbolo == "P")  return QColor(255, 165, 0); // Naranja
-    if (atomo.simbolo == "F" || atomo.simbolo == "Cl") return Qt::green;
-    return Qt::magenta; // Color por defecto para elementos no registrados
+    // Paleta de colores optimizada (Flat / Material Design) adaptada al estándar CPK químico
+    if (atomo.simbolo == "H")  return QColor("#F3F4F6"); // Blanco grisáceo limpio
+    if (atomo.simbolo == "C")  return QColor("#4B5563"); // Gris grafito profesional (no se confunde con el fondo negro)
+    if (atomo.simbolo == "O")  return QColor("#EF4444"); // Rojo coral moderno
+    if (atomo.simbolo == "N")  return QColor("#3B82F6"); // Azul cobalto eléctrico
+    if (atomo.simbolo == "S")  return QColor("#FBBF24"); // Amarillo azufre pastel
+    if (atomo.simbolo == "P")  return QColor("#F97316"); // Naranja brillante
+    if (atomo.simbolo == "F" || atomo.simbolo == "Cl") return QColor("#10B981"); // Verde esmeralda claro
+    return QColor("#EC4899"); // Magenta/Rosa chicle para elementos no identificados
 }

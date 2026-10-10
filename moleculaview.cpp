@@ -165,42 +165,46 @@ void MoleculaView::procesarClickCrearEnlace(const QVector3D& posClick) {
 
     m_idAtomoSeleccionado = -1;
 
-    // Regla 1: No se puede enlazar un átomo consigo mismo
-    if(idAtomo1 == idAtomo2) return;
 
-    // Recuperamos las estructuras Atomo completas de la lista
+    // 3. Recuperamos las estructuras Atomo completas del vector de memoria
     Atomo atomo1, atomo2;
+    bool encontrado1 = false, encontrado2 = false;
     for(const Atomo& a : m_listaAtomos) {
-        if(a.id == idAtomo1) atomo1 = a;
-        if(a.id == idAtomo2) atomo2 = a;
+        if(a.id == idAtomo1) { atomo1 = a; encontrado1 = true; }
+        if(a.id == idAtomo2) { atomo2 = a; encontrado2 = true; }
+        if(encontrado1 && encontrado2) break;
     }
 
-    // REGLAS 2 Y 3: Si ya existe el enlace, recuperar orden y evaluar incremento
-
-    for(Enlace &enlace: m_listaEnlaces){
+    // =========================================================================
+    // CASO A: EL ENLACE YA EXISTE -> EVALUAMOS INCREMENTAR SU ORDEN (1 -> 2 -> 3)
+    // =========================================================================
+    for(Enlace &enlace : m_listaEnlaces){
         if((enlace.id_atomo1 == idAtomo1 && enlace.id_atomo2 == idAtomo2) ||
             (enlace.id_atomo1 == idAtomo2 && enlace.id_atomo2 == idAtomo1)) {
 
+            // Si ya es triple (orden 3), hemos llegado al límite químico permitido
             if(enlace.orden >= 3) return;
 
+            // Verificamos si los átomos admiten absorber un orden más en sus valencias
             if(isEnlacePosible(atomo1, atomo2)){
-                enlace.orden++;
-                setModoLienzo(m_modoLienzo); // Repinta el lienzo
+                enlace.orden++;              // Incrementamos el orden (Pasa a doble o triple)
+                setModoLienzo(m_modoLienzo); // Notificamos a la vista para repintar
             }
-            return;
+            return; // ¡IMPORTANTE! Salimos de la función aquí para evitar que se ejecute el código de abajo
         }
     }
 
-    // REGLA 4: Si no existe enlace, comprobar viabilidad y crearlo
-
+    // =========================================================================
+    // CASO B: EL ENLACE NO EXISTE -> CREAMOS UN ENLACE NUEVO DESDE CERO (ORDEN 1)
+    // =========================================================================
     if(isEnlacePosible(atomo1, atomo2)){
         Enlace nuevoEnlace;
         nuevoEnlace.id_atomo1 = idAtomo1;
         nuevoEnlace.id_atomo2 = idAtomo2;
-        nuevoEnlace.orden     = 1; // Nace como enlace simple
+        nuevoEnlace.orden     = 1; // Todo enlace nuevo nace siendo simple
 
         m_listaEnlaces.append(nuevoEnlace);
-        setModoLienzo(m_modoLienzo); // Notifica e invoca actualizarLienzo()
+        setModoLienzo(m_modoLienzo); // Notificamos e invocamos actualizarLienzo()
     }
 }
 
@@ -258,62 +262,57 @@ int MoleculaView::getValenciaMax(const Atomo& atomo){
 }
 
 bool MoleculaView::isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2){
-    // 2. Calcular cuántos enlaces tendrían si aceptamos esta nueva unión/incremento
-    // Sumamos +1 al conteo actual de ambos
-    int futurosEnlaces1 = getEnlaces(atomo1) + 1;
-    int futurosEnlaces2 = getEnlaces(atomo2) + 1;
+    // 1. Evitar que un átomo se enlace consigo mismo (seguridad redundante)
+    if (atomo1.id == atomo2.id) return false;
 
-    // 3. Obtener sus valencias ideales de la tabla periódica
-    int ideal1 = getValenciaMax(atomo1); // Tu función anterior (C=4, O=2, H=1...)
-    int ideal2 = getValenciaMax(atomo2);
+    // 2. Calcular cuántos enlaces TOTALES acumulados tiene cada átomo actualmente
+    int enlacesActuales1 = getEnlaces(atomo1);
+    int enlacesActuales2 = getEnlaces(atomo2);
 
-    // 4. Calcular las cargas formales resultantes (Desplazamiento de valencia)
-    int cargaFutura1 = ideal1 - futurosEnlaces1;
-    int cargaFutura2 = ideal2 - futurosEnlaces2;
+    // 3. Obtener sus valencias máximas desde la tabla periódica configurada
+    int max1 = getValenciaMax(atomo1);
+    int max2 = getValenciaMax(atomo2);
 
-    // =========================================================================
-    // ZONA DE EXCEPCIONES EXPLÍCITAS (Casos moleculares puros tolerados)
-    // =========================================================================
-
-    // Excepción 1: Hidrógeno molecular (H-H).
-    // Aunque el H tiene valencia 1, el enlace H-H es perfectamente válido y su carga formal es 0.
-    if (atomo1.simbolo == "H" && atomo2.simbolo == "H" && futurosEnlaces1 == 1) {
-        return true;
+    // Si cualquiera de los dos supera su octeto/dueto al añadir un orden más, se bloquea
+    if ((enlacesActuales1 + 1) > max1 || (enlacesActuales2 + 1) > max2) {
+        return false;
     }
 
-    // Excepción 2: Estructuras resonantes de Ozono (O3) o similares (Enlaces coordinados/Dativos)
-    // En el ozono, un oxígeno central tiene 3 enlaces (carga +1) y uno terminal tiene 1 enlace (carga -1).
-    if (atomo1.simbolo == "O" && atomo2.simbolo == "O") {
-        // Permitimos de forma controlada que el oxígeno llegue a tener 3 enlaces
-        // SI Y SOLO SI está unido a otro oxígeno que equilibre el sistema.
-        if (futurosEnlaces1 <= 3 && futurosEnlaces2 <= 3) {
-            return true;
+    // =========================================================================
+    // 4. TABLA DE ENFRENTAMIENTO DIRECTO (COMPATIBILIDAD GEOMÉTRICA)
+    // =========================================================================
+    QString s1 = atomo1.simbolo;
+    QString s2 = atomo2.simbolo;
+
+    // --- BLOQUE HIDRÓGENO (H) ---
+    if (s1 == "H" || s2 == "H") {
+        QString compañero = (s1 == "H") ? s2 : s1;
+        // El hidrógeno orgánico elemental solo se une a C, H, O o N
+        if (compañero != "C" && compañero != "H" && compañero != "O" && compañero != "N") {
+            return false;
         }
     }
 
-    // =========================================================================
-    // REGLAS DE EXCLUSIÓN ABSOLUTA (Enlaces imposibles)
-    // =========================================================================
-
-    // Regla A: El Hidrógeno JAMÁS puede tener más de 1 enlace (No soporta carga covalente positiva)
-    if ((atomo1.simbolo == "H" && futurosEnlaces1 > 1) ||
-        (atomo2.simbolo == "H" && futurosEnlaces2 > 1)) {
-        return false;
+    // --- BLOQUE CARBONO (C) ---
+    if (s1 == "C" || s2 == "C") {
+        // Habiendo comprobado el máximo de 4 enlaces arriba, se puede unir libremente a C, H, O, N
+        return true;
     }
 
-    // Regla B: El Carbono es muy estricto. No expande octeto (máx 4 enlaces)
-    // y tener un carbono con menos de 3 enlaces en una estructura estable sin terminar es inaceptable.
-    if ((atomo1.simbolo == "C" && futurosEnlaces1 > 4) ||
-        (atomo2.simbolo == "C" && futurosEnlaces2 > 4)) {
-        return false;
+    // --- BLOQUE OXÍGENO (O) ---
+    if (s1 == "O" && s2 == "O") {
+        return true; // Enlaces peróxido u Ozono permitidos
     }
 
-    // Regla C: Filtro general de inestabilidad por carga (Límite del Octeto rígido para periodo 2)
-    // Si la carga resultante se dispara más allá de un estado catiónico/aniónico razonable (+1 o -1)
-    if (qAbs(cargaFutura1) > 1 || qAbs(cargaFutura2) > 1) {
-        return false;
+    // --- BLOQUE NITRÓGENO (N) ---
+    if ((s1 == "N" && s2 == "O") || (s1 == "O" && s2 == "N")) {
+        return true; // Grupos funcionales Nitro u óxidos directos
     }
-    return true; // Si pasa todos los filtros, el enlace es químicamente viable
+    if (s1 == "N" && s2 == "N") {
+        return true; // Enlaces azo-compuestos o di-nitrógeno
+    }
+
+    return true; // Flexibilidad para el resto de elementos añadidos
 }
 
 int MoleculaView::getElectronesValenciaNaturales(const Atomo& atomo){
@@ -329,7 +328,7 @@ int MoleculaView::getEnlaces(const Atomo& atomo){
     int totalEnlaces = 0;
     for(Enlace &enlace: m_listaEnlaces){
         if(enlace.id_atomo1 == atomo.id || enlace.id_atomo2 == atomo.id){
-            totalEnlaces = enlace.orden;
+            totalEnlaces += enlace.orden;
         }
     }
     return totalEnlaces;
