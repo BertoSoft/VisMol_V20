@@ -87,6 +87,10 @@ private:
     void    setModoLienzo(const ModoLienzo& modoLienzo);
     void    limpiarLienzo();
     int     getIdAtomoFromPos(const QVector3D& pos3D);
+    int     getValenciaMax(const Atomo& atomo);
+    int     getEnlaces(const Atomo& atomo);
+    int     getElectronesValenciaNaturales(const Atomo& atomo);
+    bool    isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2);
 
 };
 

@@ -26,6 +26,9 @@ private:
     QGraphicsScene* m_escena = nullptr; // El espacio infinito donde se colocarán los gráficos
     MoleculaView*   m_view   = nullptr; // Nuestro puente con el negocio de la aplicación
 
+    qreal   getRadioFromAtomo(const Atomo& atomo);
+    QColor  getColorFromAtomo(const Atomo& atomo);
+
 };
 
 
