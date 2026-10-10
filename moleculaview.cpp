@@ -29,9 +29,9 @@ void MoleculaView::setModoEditor(const ModoEditor& nuevoModo){
 
     if(m_idAtomoSeleccionado != -1){
         m_idAtomoSeleccionado = -1;
-        emit actualizarLienzo();
     }
 
+    emit actualizarLienzo();
     emit modoEditorCambiado(m_modoActual);
     setMensajeEstado();
 }

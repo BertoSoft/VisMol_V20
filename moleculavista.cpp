@@ -49,6 +49,10 @@ void MoleculaVista::setMoleculaView(MoleculaView* view){
 
     // Cabñle 4 conecta la señal de menuEliminar con el menu de boton derecho
     connect(m_view, &MoleculaView::setMenuEliminar, this, &MoleculaVista::setMenuBotonDerecho);
+
+    // Sincronización forzada inicial directa desde el Emisor real:
+    m_view->setModoEditor(MoleculaView::ModoSeleccion);
+    emit m_view->modoLienzoCambiado(m_view->getModoLienzo());
 }
 
 // =========================================================================
