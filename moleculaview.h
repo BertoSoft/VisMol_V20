@@ -50,7 +50,13 @@ public:
     void setModoEditor(const ModoEditor& nuevoModo);
     void setElementoActivo(const QString& simbolo);
     void setNuevoProyecto();
+    void cerrarProyecto();
     void setClick(const QVector3D& posClick);
+    void setClickDerecho(const QVector3D& posClickDerecho);
+    void limpiarLienzo();
+    void delAtomo(const int& idAtomo);
+    void delEnlace(const int& idEnlace);
+
 
 
     // 3. Consultores de estado
@@ -63,9 +69,11 @@ public:
 signals:
 
     // 4. Señales para ordenar a la Vista que se actualice
-    void modoEditorCambiado(MoleculaView::ModoEditor nuevoModo);
-    void modoLienzoCambiado(MoleculaView::ModoLienzo nuevoModo);
+    void modoEditorCambiado(const MoleculaView::ModoEditor& nuevoModo);
+    void modoLienzoCambiado(const MoleculaView::ModoLienzo& nuevoModo);
+    void setMenuEliminar(const int& idAtomo, const int& idEnlace);
     void actualizarLienzo();
+    void notificarMensajeEstado(const QString& mensaje);
 
 private:
 
@@ -85,12 +93,13 @@ private:
     void    procesarClickRotacion(const QVector3D& posClick);
     void    setElementoSeleccionado(int idAtomoSelecccionado);
     void    setModoLienzo(const ModoLienzo& modoLienzo);
-    void    limpiarLienzo();
     int     getIdAtomoFromPos(const QVector3D& pos3D);
     int     getValenciaMax(const Atomo& atomo);
     int     getEnlaces(const Atomo& atomo);
     int     getElectronesValenciaNaturales(const Atomo& atomo);
     bool    isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2);
+    void    setMensajeEstado();
+    float   getDistanciaPuntoSegmento(const QVector3D& punto, const QVector3D& pos1, const QVector3D& pos2);
 
 };
 

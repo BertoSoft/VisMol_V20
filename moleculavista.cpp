@@ -9,6 +9,7 @@
 #include <QTime>
 #include <QCloseEvent>
 #include <QMessageBox>
+#include <QCursor>
 
 // =========================================================================
 // ZONA: CICLO DE VIDA DE LA VENTANA
@@ -31,7 +32,7 @@ void MoleculaVista::setMoleculaView(MoleculaView* view){
 
     m_view = view; // La ventana guarda el cerebro
 
-    // ¡Aquí! La ventana le comparte el cerebro a su lienzo privado de forma limpia
+    // Comparte el cerebro con el lienzo privado de forma limpia
     if(m_lienzo) {
         m_lienzo->setMoleculaView(view);
         connect(m_view, &MoleculaView::actualizarLienzo, m_lienzo, &MoleculaLienzo::actualizarLienzo);
@@ -40,8 +41,73 @@ void MoleculaVista::setMoleculaView(MoleculaView* view){
     // Cable 1: Gobierna la salud del documento (Persistencia, Datos, Docks)
     connect(m_view, &MoleculaView::modoLienzoCambiado, this, &MoleculaVista::alCambiarModoLienzo);
 
-    // Cable 2: Gobierna la herramienta del ratón (Textos informativos de acción)
+    // Cable 2: Gobierna la sincronización visual de botones hundidos (Ratón)
     connect(m_view, &MoleculaView::modoEditorCambiado, this, &MoleculaVista::alCambiarModoEditor);
+
+    // Cable 3 (¡NUEVO!): Desvía el texto generado por el negocio hacia la barra de estado de la UI
+    connect(m_view, &MoleculaView::notificarMensajeEstado, m_lblEstadoTexto, &QLabel::setText);
+
+    // Cabñle 4 conecta la señal de menuEliminar con el menu de boton derecho
+    connect(m_view, &MoleculaView::setMenuEliminar, this, &MoleculaVista::setMenuBotonDerecho);
+}
+
+// =========================================================================
+// ZONA: Funciones Privadas
+// =========================================================================
+
+bool MoleculaVista::sePuedeCerrar(){
+    if (!m_view) return true;
+
+    MoleculaView::ModoLienzo modoLienzo = m_view->getModoLienzo();
+
+    // Si no hay cambios sin guardar o está vacío, es seguro continuar
+    if (modoLienzo.estaGuardado || modoLienzo.estaVacio) {
+        return true;
+    }
+
+    // Si hay peligro, abrimos el cuadro de diálogo (responsabilidad de la Vista)
+    QMessageBox::StandardButton respuesta = QMessageBox::warning(
+        this,
+        tr("Cambios sin guardar"),
+        tr("El proyecto actual tiene cambios sin guardar.\n¿Desea guardarlos antes de continuar?"),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel
+        );
+
+    if (respuesta == QMessageBox::Save) {
+        guardarProyecto();
+        return true; // Continuamos tras guardar
+    }
+    else if (respuesta == QMessageBox::Discard) {
+        return true; // Continuamos descartando los cambios
+    }
+
+    return false; // El usuario pulsó Cancelar, detenemos cualquier acción
+}
+
+void MoleculaVista::setMenuBotonDerecho(const int& idAtomo, const int& idEnlace){
+    QMenu menuDerecho(this);
+
+    // CASO A: El clic derecho cayó sobre un átomo válido
+    if (idAtomo >= 0) {
+        QAction* actEliminarAtomo = menuDerecho.addAction(tr("Eliminar Átomo"));
+        QAction* accionSeleccionada = menuDerecho.exec(QCursor::pos());
+
+        if (accionSeleccionada == actEliminarAtomo) {
+            m_view->delAtomo(idAtomo); // El cerebro limpia la memoria
+        }
+        return; // ¡CRUCIAL! Salimos inmediatamente del método para evitar lecturas de basura
+    }
+
+    // CASO B: El clic derecho cayó sobre un enlace limpio
+    if (idEnlace >= 0) {
+        QAction* actEliminarEnlace = menuDerecho.addAction(tr("Eliminar Enlace"));
+        QAction* accionSeleccionada = menuDerecho.exec(QCursor::pos());
+
+        if (accionSeleccionada == actEliminarEnlace) {
+            m_view->delEnlace(idEnlace);
+        }
+        return;
+    }
 }
 
 // =========================================================================
@@ -76,7 +142,7 @@ void MoleculaVista::initMenu(){
     m_accionesArchivo.abrir = menuArchivo->addAction(tr("Abrir Proyecto (.json)"), QKeySequence::Open, this, &MoleculaVista::abrirProyecto);
     m_accionesArchivo.abrir->setIcon(QIcon(":/iconos/abrir.png"));
 
-    m_accionesArchivo.cerrar = menuArchivo->addAction(tr("Cerrar Proyecto"), QKeySequence::Close, this, &MoleculaVista::limpiarLienzo);
+    m_accionesArchivo.cerrar = menuArchivo->addAction(tr("Cerrar Proyecto"), QKeySequence::Close, this, &MoleculaVista::cerrarProyecto);
     m_accionesArchivo.cerrar->setIcon(QIcon(":/iconos/cerrar.png"));
 
     m_accionesArchivo.guardar = menuArchivo->addAction(tr("Guardar Proyecto (.json)"), QKeySequence::Save, this, &MoleculaVista::guardarProyecto);
@@ -322,15 +388,24 @@ void MoleculaVista::initConnect(){
 // ZONA: PULSACIONES DE MENÚ SUPERIOR (SLOTS)
 // =========================================================================
 
-void MoleculaVista::nuevoProyecto()   {m_view->setNuevoProyecto();}
+void MoleculaVista::nuevoProyecto(){
+    if (sePuedeCerrar()) {
+        m_view->setNuevoProyecto(); // El cerebro hace el trabajo limpio
+    }
+}
 void MoleculaVista::abrirProyecto()   {}
 void MoleculaVista::guardarProyecto() {}
+void MoleculaVista::cerrarProyecto(){
+    if (sePuedeCerrar()){
+        m_view->cerrarProyecto(); // El cerebro hace el trabajo limpio
+    }
+}
 void MoleculaVista::salir()           { this->close(); }
 void MoleculaVista::importarXYZ()     {}
 void MoleculaVista::exportarMOPAC()   {}
 void MoleculaVista::deshacer()        {}
 void MoleculaVista::rehacer()         {}
-void MoleculaVista::limpiarLienzo()   {}
+void MoleculaVista::limpiarLienzo()   {m_view->limpiarLienzo();}
 void MoleculaVista::configurarMopac() {}
 void MoleculaVista::mostrarFrecuencias(){}
 void MoleculaVista::verLogOut()        {}
@@ -390,26 +465,14 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
 void MoleculaVista::alCambiarModoEditor(const MoleculaView::ModoEditor& modoEditor){
     if (!m_view) return;
 
-    // Extraemos el estado del lienzo de forma síncrona
-    MoleculaView::ModoLienzo lienzo = m_view->getModoLienzo();
-
-    // CASO CRÍTICO: Si el proyecto NO está iniciado, fijamos el texto de bloqueo absoluto
-    if (!lienzo.estaIniciado) {
-        m_lblEstadoTexto->setText(tr(" Proyecto Vacío. Cree un nuevo lienzo o abra un archivo para comenzar."));
-        return;
-    }
-
-    // CASO NORMAL: El proyecto está activo, sincronizamos texto y botones hundidos (Checked)
+    // Sincronización visual estricta de la botonería (Efecto hundido / Checked)
     switch(modoEditor) {
     case MoleculaView::ModoSeleccion:
-        m_lblEstadoTexto->setText(tr(" Herramienta activa: Modo Seleccion (Puntero Neutro)."));
         m_accionesElementos.modoSeleccion->setChecked(true);
         break;
 
     case MoleculaView::ModoDibujo:
-        m_lblEstadoTexto->setText(tr(" Herramienta activa: Dibujando Átomo de %1.").arg(m_view->getSimboloAtomoActivo()));
-
-        // Sincronización del botón de elemento químico activo
+        // El botón activo se hunde dependiendo del elemento químico seleccionado en el cerebro
         if (m_view->getSimboloAtomoActivo() == "C") m_accionesElementos.carbono->setChecked(true);
         else if (m_view->getSimboloAtomoActivo() == "H") m_accionesElementos.hidrogeno->setChecked(true);
         else if (m_view->getSimboloAtomoActivo() == "O") m_accionesElementos.oxigeno->setChecked(true);
@@ -417,12 +480,10 @@ void MoleculaVista::alCambiarModoEditor(const MoleculaView::ModoEditor& modoEdit
         break;
 
     case MoleculaView::ModoCrearEnlace:
-        m_lblEstadoTexto->setText(tr(" Herramienta activa: Modo Enlace Covalente habilitado."));
         m_accionesElementos.modoEnlace->setChecked(true);
         break;
 
     case MoleculaView::ModoRotacion3D:
-        m_lblEstadoTexto->setText(tr(" Herramienta activa: Modo Rotación y Vista 3D."));
         m_accionesElementos.modoRotar->setChecked(true);
         break;
     }
@@ -466,37 +527,11 @@ void MoleculaVista::alSeleccionarFrecuencia(int indice){
 // ZONA: EVENTOS PROTEGIDOS DEL SISTEMA OPERATIVO
 // =========================================================================
 void MoleculaVista::closeEvent(QCloseEvent *evento){
-    if(m_view){
-        MoleculaView::ModoLienzo  modoLienzo = m_view->getModoLienzo();
-
-        if(!modoLienzo.estaGuardado && !modoLienzo.estaVacio){
-            QMessageBox::StandardButton respuesta;
-            respuesta = QMessageBox::warning(
-                this,
-                tr("Salir de VisMol"),
-                tr("El proyecto actual tiene cambios sin guardar.\n ¿Desea guardarlos antes de salir?"),
-                QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel
-                );
-
-            if(respuesta == QMessageBox::Save){
-                guardarProyecto();
-                evento->accept();
-                return;
-            }
-            else if(respuesta == QMessageBox::Discard){
-                evento->accept();
-                return;
-            }
-            else{
-                evento->ignore();
-                return;
-            }
-        }
+    if (sePuedeCerrar()) {
+        evento->accept(); // Cierra la aplicación de forma segura
+    } else {
+        evento->ignore(); // Cancela el cierre de la ventana
     }
-    else{
-        evento->accept();
-    }
-
 }
 
 // =========================================================================

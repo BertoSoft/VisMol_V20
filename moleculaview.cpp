@@ -26,6 +26,7 @@ void MoleculaView::setModoEditor(const ModoEditor& nuevoModo){
     if(getModoEditor() == nuevoModo) return;
 
     m_modoActual = nuevoModo;
+    setMensajeEstado();
 }
 
 void MoleculaView::setElementoActivo(const QString& simbolo){
@@ -33,6 +34,7 @@ void MoleculaView::setElementoActivo(const QString& simbolo){
     if(getSimboloAtomoActivo() == simbolo) return;
 
     m_atomoActivo = simbolo;
+    setMensajeEstado();
 }
 
 void MoleculaView::setNuevoProyecto(){
@@ -80,6 +82,83 @@ void MoleculaView::setClick(const QVector3D& posClick){
     }
 }
 
+void MoleculaView::setClickDerecho(const QVector3D& posClickDerecho){
+
+    // 1. Buscamos primero si hay un átomo bajo el cursor
+    int idAtomo     = getIdAtomoFromPos(posClickDerecho);
+    int idEnlace    = -1; // De momento mientras no medimos distancias
+
+    // 2. Si NO hay ningún átomo, buscamos si el usuario ha pulsado sobre una línea (enlace)
+    if (idAtomo < 0) {
+        const float TOLERANCIA_CLIC_ENLACE = 12.0f; // Margen de error en píxeles/unidades para acertar a la línea
+        float distanciaMinima = TOLERANCIA_CLIC_ENLACE;
+
+        for (int i = 0; i < m_listaEnlaces.size(); ++i) {
+            const Enlace& enlace = m_listaEnlaces[i];
+
+            // Recuperamos las coordenadas de los dos átomos que forman el enlace
+            QVector3D pos1, pos2;
+            bool e1 = false, e2 = false;
+            for (const Atomo& a : m_listaAtomos) {
+                if (a.id == enlace.id_atomo1) { pos1 = a.posicion; e1 = true; }
+                if (a.id == enlace.id_atomo2) { pos2 = a.posicion; e2 = true; }
+                if (e1 && e2) break;
+            }
+
+            if (e1 && e2) {
+                // Medimos la distancia geométrica desde el clic hasta este segmento de enlace
+                float dist = getDistanciaPuntoSegmento(posClickDerecho, pos1, pos2);
+                if (dist < distanciaMinima) {
+                    distanciaMinima = dist;
+                    idEnlace = i; // Guardamos el índice del enlace más cercano
+                }
+            }
+        }
+    }
+
+
+    if(idAtomo>=0 || idEnlace>=0){
+        emit setMenuEliminar(idAtomo, idEnlace);
+    }
+}
+
+void MoleculaView::delAtomo(const int& idAtomo){
+    // 1.- INTEGRIDAD QUÍMICA CRÍTICA: Eliminamos los enlaces recorriendo el vector al revés
+    for (int i = m_listaEnlaces.size() - 1; i >= 0; --i) {
+        if (m_listaEnlaces[i].id_atomo1 == idAtomo || m_listaEnlaces[i].id_atomo2 == idAtomo) {
+            m_listaEnlaces.removeAt(i);
+        }
+    }
+
+    // 2.- Buscamos y eliminamos el átomo del vector en memoria
+    for (int i = 0; i < m_listaAtomos.size(); i++) {
+        if (m_listaAtomos[i].id == idAtomo) {
+            m_listaAtomos.removeAt(i);
+            break;
+        }
+    }
+
+    // 3.- Si eliminamos un átomo preseleccionado, limpiamos la selección
+    if (m_idAtomoSeleccionado == idAtomo) {
+        m_idAtomoSeleccionado = -1;
+    }
+
+    // 4.- Notificamos centralizadamente para redibujar
+    setModoLienzo(m_modoLienzo);
+}
+
+void MoleculaView::delEnlace(const int& idEnlace){
+
+    // Buscamos el enlace por las identificaciones de sus átomos (o si tuviera un id único)
+    // En tu estructura actual, si pasamos el índice directo del vector de enlaces:
+    if (idEnlace >= 0 && idEnlace < m_listaEnlaces.size()) {
+        m_listaEnlaces.removeAt(idEnlace);
+
+        // Notificamos e invocamos al lienzo para que repinte las líneas inmediatamente
+        setModoLienzo(m_modoLienzo);
+    }
+}
+
 void MoleculaView::limpiarLienzo(){
     // Alteración de memoria en silencio
     m_listaAtomos.clear();
@@ -94,7 +173,26 @@ void MoleculaView::limpiarLienzo(){
 
     modo.estaVacio      = true;
     modo.estaGuardado   = false;
-    modo.estaIniciado   = false; // Regresa al letargo de espera
+    modo.estaIniciado   = true; // Borra todo pero no cierra el proyecto
+
+    setModoLienzo(modo);
+}
+
+void MoleculaView::cerrarProyecto(){
+    // Alteración de memoria en silencio
+    m_listaAtomos.clear();
+    m_listaEnlaces.clear();
+    m_contadorIds   = 0;
+
+    m_atomoActivo   = "C";
+    m_modoActual    = ModoSeleccion;
+
+    // Reseteo absoluto de la salud del documento
+    ModoLienzo modo;
+
+    modo.estaVacio      = true;
+    modo.estaGuardado   = false;
+    modo.estaIniciado   = false; // Cierra totalmente el proyecto
 
     setModoLienzo(modo);
 }
@@ -226,9 +324,9 @@ void MoleculaView::setModoLienzo(const ModoLienzo& modoLienzo){
     // 4. EMISIÓN ATÓMICA CENTRALIZADA HACIA LA INTERFAZ
     emit modoEditorCambiado(m_modoActual);
     emit modoLienzoCambiado(m_modoLienzo);
-
-    // Le decimos al lienzo: "Las listas de memoria han cambiado, vuelve a pintar"
     emit actualizarLienzo();
+
+    setMensajeEstado();
 }
 
 int MoleculaView::getIdAtomoFromPos(const QVector3D& posClick){
@@ -332,4 +430,50 @@ int MoleculaView::getEnlaces(const Atomo& atomo){
         }
     }
     return totalEnlaces;
+}
+
+void MoleculaView::setMensajeEstado(){
+    // Si el proyecto NO ha sido iniciado o está en letargo, mandamos el texto de bloqueo
+    if (!m_modoLienzo.estaIniciado) {
+        emit notificarMensajeEstado(tr(" Proyecto Vacío. Cree un nuevo lienzo o abra un archivo para comenzar."));
+        return;
+    }
+
+    // Evaluamos la herramienta activa actual en el negocio
+    switch(m_modoActual) {
+    case MoleculaView::ModoSeleccion:
+        emit notificarMensajeEstado(tr(" Herramienta activa: Modo Seleccion (Puntero Neutro)."));
+        break;
+
+    case MoleculaView::ModoDibujo:
+        emit notificarMensajeEstado(tr(" Herramienta activa: Dibujando Átomo de %1.").arg(m_atomoActivo));
+        break;
+
+    case MoleculaView::ModoCrearEnlace:
+        emit notificarMensajeEstado(tr(" Herramienta activa: Modo Enlace Covalente habilitado."));
+        break;
+
+    case MoleculaView::ModoRotacion3D:
+        emit notificarMensajeEstado(tr(" Herramienta activa: Modo Rotación y Vista 3D."));
+        break;
+    }
+}
+
+float MoleculaView::getDistanciaPuntoSegmento(const QVector3D& punto, const QVector3D& pos1, const QVector3D& pos2){
+    QVector3D ab = pos2 - pos1;
+    QVector3D ap = punto - pos1;
+
+    // Calcular la proyección del punto sobre el vector del segmento
+    float longitudAbCuadrada = ab.lengthSquared();
+    if (longitudAbCuadrada < 0.0001f) return pos1.distanceToPoint(punto); // Evitar división por cero
+
+    // Factor de proyección (t) acotado entre 0.0 y 1.0 para mantenerse dentro del segmento
+    float t = QVector3D::dotProduct(ap, ab) / longitudAbCuadrada;
+    t = qMax(0.0f, qMin(1.0f, t));
+
+    // El punto más cercano sobre el segmento de recta
+    QVector3D puntoCercano = pos1 + t * ab;
+
+    // Devolvemos la distancia real entre el clic y ese punto cercano
+    return punto.distanceToPoint(puntoCercano);
 }

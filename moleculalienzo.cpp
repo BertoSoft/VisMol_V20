@@ -197,6 +197,13 @@ void MoleculaLienzo::mousePressEvent(QMouseEvent* mouseEv){
         m_view->setClick(vector3D);
     }
 
+    if(mouseEv->button() == Qt::RightButton){
+        QPointF     posClickDerecho = this->mapToScene(mouseEv->pos());
+        QVector3D   vector3D        = QVector3D(posClickDerecho.x(), posClickDerecho.y(), 0.0f);
+
+        m_view->setClickDerecho(vector3D);
+    }
+
     QGraphicsView::mousePressEvent(mouseEv);
 }
 

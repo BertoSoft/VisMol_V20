@@ -51,6 +51,7 @@ private slots:
     // =========================================================================
     void nuevoProyecto();
     void abrirProyecto();
+    void cerrarProyecto();
     void guardarProyecto();
     void salir();
     void importarXYZ();
@@ -150,5 +151,12 @@ private:
 
     MoleculaLienzo* m_lienzo            = nullptr;
     MoleculaView*   m_view              = nullptr;
+
+    //#####################################################################
+    // Funciones Privadas
+    //#####################################################################
+
+    bool sePuedeCerrar();
+    void setMenuBotonDerecho(const int& idAtomo, const int& idEnlace);
 };
 #endif // MOLECULAVISTA_H
