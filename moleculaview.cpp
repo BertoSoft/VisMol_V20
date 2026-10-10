@@ -26,12 +26,24 @@ void MoleculaView::setModoEditor(const ModoEditor& nuevoModo){
     if(getModoEditor() == nuevoModo) return;
 
     m_modoActual = nuevoModo;
+
+    if(m_idAtomoSeleccionado != -1){
+        m_idAtomoSeleccionado = -1;
+        emit actualizarLienzo();
+    }
+
+    emit modoEditorCambiado(m_modoActual);
     setMensajeEstado();
 }
 
 void MoleculaView::setElementoActivo(const QString& simbolo){
 
     if(getSimboloAtomoActivo() == simbolo) return;
+
+    if (m_idAtomoSeleccionado != -1) {
+        m_idAtomoSeleccionado = -1;
+        emit actualizarLienzo();
+    }
 
     m_atomoActivo = simbolo;
     setMensajeEstado();
@@ -154,6 +166,9 @@ void MoleculaView::delEnlace(const int& idEnlace){
     if (idEnlace >= 0 && idEnlace < m_listaEnlaces.size()) {
         m_listaEnlaces.removeAt(idEnlace);
 
+        // ¡NUEVO!: Si se elimina un enlace por el menú contextual, limpiamos la selección por seguridad
+        m_idAtomoSeleccionado = -1;
+
         // Notificamos e invocamos al lienzo para que repinte las líneas inmediatamente
         setModoLienzo(m_modoLienzo);
     }
@@ -215,6 +230,10 @@ QVector<Enlace> MoleculaView::getListaEnlaces(){
     return m_listaEnlaces;
 }
 
+int MoleculaView::getIdAtomoSeleccionado(){
+    return m_idAtomoSeleccionado;
+}
+
 //################################################################
 // Funciones Privadas de MoleculaView
 //################################################################
@@ -248,12 +267,35 @@ void MoleculaView::procesarClickSeleccion(const QVector3D& posClick) {
 }
 
 void MoleculaView::procesarClickCrearEnlace(const QVector3D& posClick) {
-    // si el click no esta encima de un atomo, volvemos
     int idAtomoActual = getIdAtomoFromPos(posClick);
     if(idAtomoActual < 0) return;
 
     if(m_idAtomoSeleccionado < 0){
+        // 1. Buscamos primero la estructura completa del átomo pulsado en memoria
+        Atomo atomoPulsado;
+        bool encontrado = false;
+        for(const Atomo& a : m_listaAtomos) {
+            if(a.id == idAtomoActual) {
+                atomoPulsado = a;
+                encontrado = true;
+                break;
+            }
+        }
+
+        if(encontrado) {
+            int enlacesActuales = getEnlaces(atomoPulsado);
+            int valenciaMaxima  = getValenciaMax(atomoPulsado);
+
+            // 2. ¡Filtro Químico!: Si está saturado o tiene 3 enlaces, salimos limpios
+            // sin alterar m_idAtomoSeleccionado (se mantiene seguro en -1)
+            if(enlacesActuales >= valenciaMaxima || enlacesActuales == 3) {
+                return;
+            }
+        }
+
+        // 3. Si pasó el filtro con éxito, guardamos la selección y pintamos el anillo
         m_idAtomoSeleccionado = idAtomoActual;
+        setModoLienzo(m_modoLienzo);
         return;
     }
 
@@ -360,20 +402,37 @@ int MoleculaView::getValenciaMax(const Atomo& atomo){
 }
 
 bool MoleculaView::isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2){
-    // 1. Evitar que un átomo se enlace consigo mismo (seguridad redundante)
+    // 1. Evitar que un átomo se enlace consigo mismo
     if (atomo1.id == atomo2.id) return false;
 
     // 2. Calcular cuántos enlaces TOTALES acumulados tiene cada átomo actualmente
     int enlacesActuales1 = getEnlaces(atomo1);
     int enlacesActuales2 = getEnlaces(atomo2);
 
-    // 3. Obtener sus valencias máximas desde la tabla periódica configurada
+    // 3. Obtener sus valencias máximas (ej: C=4, N=3, O=2, H=1)
     int max1 = getValenciaMax(atomo1);
     int max2 = getValenciaMax(atomo2);
 
-    // Si cualquiera de los dos supera su octeto/dueto al añadir un orden más, se bloquea
+    // Regla A: Si cualquiera de los dos ya está al límite de su octeto/dueto, se bloquea
     if ((enlacesActuales1 + 1) > max1 || (enlacesActuales2 + 1) > max2) {
         return false;
+    }
+
+    // =========================================================================
+    // ¡NUEVA REGLA QUÍMICA CRÍTICA!: BLOQUEAR ENLACES CUÁDRUPLES DE FORMA PREVENTIVA
+    // =========================================================================
+    // Buscamos si ya existe un enlace entre estos dos átomos específicos
+    for (const Enlace& enlace : m_listaEnlaces) {
+        if ((enlace.id_atomo1 == atomo1.id && enlace.id_atomo2 == atomo2.id) ||
+            (enlace.id_atomo1 == atomo2.id && enlace.id_atomo2 == atomo1.id)) {
+
+            // Si el enlace actual ya es de orden 3 (Triple), es imposible físicamente
+            // que absorba un cuarto orden, sin importar que al Carbono le sobren electrones.
+            if (enlace.orden >= 3) {
+                return false;
+            }
+            break;
+        }
     }
 
     // =========================================================================
@@ -393,24 +452,23 @@ bool MoleculaView::isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2){
 
     // --- BLOQUE CARBONO (C) ---
     if (s1 == "C" || s2 == "C") {
-        // Habiendo comprobado el máximo de 4 enlaces arriba, se puede unir libremente a C, H, O, N
         return true;
     }
 
     // --- BLOQUE OXÍGENO (O) ---
     if (s1 == "O" && s2 == "O") {
-        return true; // Enlaces peróxido u Ozono permitidos
+        return true;
     }
 
     // --- BLOQUE NITRÓGENO (N) ---
     if ((s1 == "N" && s2 == "O") || (s1 == "O" && s2 == "N")) {
-        return true; // Grupos funcionales Nitro u óxidos directos
+        return true;
     }
     if (s1 == "N" && s2 == "N") {
-        return true; // Enlaces azo-compuestos o di-nitrógeno
+        return true;
     }
 
-    return true; // Flexibilidad para el resto de elementos añadidos
+    return true;
 }
 
 int MoleculaView::getElectronesValenciaNaturales(const Atomo& atomo){

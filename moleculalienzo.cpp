@@ -157,6 +157,27 @@ void MoleculaLienzo::actualizarLienzo(){
         elipse->setPen(QPen(QColor("#1F2937"), 1.5f));
         elipse->setZValue(1);
 
+        // =========================================================================
+        // ¡NUEVO!: FEEDBACK VISUAL DE ÁTOMO SELECCIONADO (ANILLO CELESTE)
+        // =========================================================================
+        if (m_view && m_view->getIdAtomoSeleccionado() == atomo.id) {
+            qreal radioAnillo = radio + 6.0; // 6 unidades más grande para que rodee el átomo
+            qreal xAnillo = atomo.posicion.x() - radioAnillo;
+            qreal yAnillo = atomo.posicion.y() - radioAnillo;
+            qreal diametroAnillo = radioAnillo * 2.0;
+
+            QGraphicsEllipseItem* anilloSel = m_escena->addEllipse(xAnillo, yAnillo, diametroAnillo, diametroAnillo);
+
+            // Configuración estética: Azul celeste vibrante (#38BDF8) y estilo punteado
+            QPen penSel(QColor("#38BDF8"));
+            penSel.setWidthF(2.5f);
+            penSel.setStyle(Qt::DashLine); // Línea discontinua/punteada muy tecnológica
+
+            anilloSel->setPen(penSel);
+            anilloSel->setBrush(Qt::NoBrush); // Interior transparente para que se vea el átomo
+            anilloSel->setZValue(3); // Capa superior para que brille por encima de todo
+        }
+
         // Renderizado del Símbolo Químico con tipografía unificada y limpia
         QGraphicsSimpleTextItem* texto = m_escena->addSimpleText(atomo.simbolo);
 

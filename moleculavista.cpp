@@ -463,28 +463,31 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
 }
 
 void MoleculaVista::alCambiarModoEditor(const MoleculaView::ModoEditor& modoEditor){
-    if (!m_view) return;
+    if (!m_view || !m_lienzo) return; // Protección de punteros
 
-    // Sincronización visual estricta de la botonería (Efecto hundido / Checked)
+    // 1. Sincronización visual de la botonería (Efecto hundido)
     switch(modoEditor) {
     case MoleculaView::ModoSeleccion:
         m_accionesElementos.modoSeleccion->setChecked(true);
+        m_lienzo->setCursor(Qt::ArrowCursor); // Flecha neutra profesional
         break;
 
     case MoleculaView::ModoDibujo:
-        // El botón activo se hunde dependiendo del elemento químico seleccionado en el cerebro
         if (m_view->getSimboloAtomoActivo() == "C") m_accionesElementos.carbono->setChecked(true);
         else if (m_view->getSimboloAtomoActivo() == "H") m_accionesElementos.hidrogeno->setChecked(true);
         else if (m_view->getSimboloAtomoActivo() == "O") m_accionesElementos.oxigeno->setChecked(true);
         else if (m_view->getSimboloAtomoActivo() == "N") m_accionesElementos.nitrogeno->setChecked(true);
+        m_lienzo->setCursor(Qt::CrossCursor); // Cruz de precisión para dibujar
         break;
 
     case MoleculaView::ModoCrearEnlace:
         m_accionesElementos.modoEnlace->setChecked(true);
+        m_lienzo->setCursor(Qt::PointingHandCursor); // Mano para seleccionar átomos a unir
         break;
 
     case MoleculaView::ModoRotacion3D:
         m_accionesElementos.modoRotar->setChecked(true);
+        m_lienzo->setCursor(Qt::OpenHandCursor); // Mano abierta para arrastrar/rotar espacio
         break;
     }
 }

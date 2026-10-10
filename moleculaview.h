@@ -65,6 +65,7 @@ public:
     QString             getSimboloAtomoActivo();
     QVector<Atomo>      getListaAtomos();
     QVector<Enlace>     getListaEnlaces();
+    int                 getIdAtomoSeleccionado();
 
 signals:
 
