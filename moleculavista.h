@@ -119,6 +119,7 @@ private:
         QAction* hidrogeno      = nullptr;
         QAction* oxigeno        = nullptr;
         QAction* nitrogeno      = nullptr;
+        QAction* tablaPeriodica = nullptr;  // ¡NUEVO! Acción para desplegar la tabla
         QAction* modoSeleccion  = nullptr;
         QAction* modoEnlace     = nullptr;
         QAction* modoRotar      = nullptr;

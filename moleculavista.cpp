@@ -185,6 +185,10 @@ void MoleculaVista::initMenu(){
 
 void MoleculaVista::initToolBars(){
 
+
+    // =========================================================================
+    // BARRA SUPERIOR: GESTIÓN DE PROYECTO Y ACCIONES GENERALES
+    // =========================================================================
     m_barraProyecto = addToolBar(tr("Proyecto"));
     m_barraProyecto->setObjectName("barraProyecto");
     m_barraProyecto->addAction(m_accionesArchivo.salir);
@@ -201,31 +205,79 @@ void MoleculaVista::initToolBars(){
     m_barraProyecto->addSeparator();
     m_barraProyecto->addAction(m_accionesCalculo.configurarMopac);
 
+    // =========================================================================
+    // BARRA LATERAL: HERRAMIENTAS Y ELEMENTOS QUÍMICOS (OPTIMIZADA)
+    // =========================================================================
     m_barraElementos = new QToolBar(tr("Herramientas de Elementos"), this);
     m_barraElementos->setObjectName("barraElementos");
+    m_barraElementos->setOrientation(Qt::Vertical);
+    m_barraElementos->setToolButtonStyle(Qt::ToolButtonTextUnderIcon); // Icono debajo del texto
     addToolBar(Qt::LeftToolBarArea, m_barraElementos);
 
-    m_accionesElementos.carbono = new QAction(tr("Carbono (C)"), this);
-    m_accionesElementos.carbono->setCheckable(true);
+    // --- SUBSECCIÓN A: HERRAMIENTAS DE INTERACCIÓN ---
+    QLabel* lblSeccionModos = new QLabel(tr(" HERRAMIENTAS"), this);
+    lblSeccionModos->setStyleSheet("color: #666666; font-weight: bold; font-size: 11px; padding: 14px 0px 6px 6px;");
+    m_barraElementos->addWidget(lblSeccionModos);
 
-    m_accionesElementos.hidrogeno = new QAction(tr("Hidrógeno (H)"), this);
-    m_accionesElementos.hidrogeno->setCheckable(true);
-
-    m_accionesElementos.oxigeno = new QAction(tr("Oxígeno (O)"), this);
-    m_accionesElementos.oxigeno->setCheckable(true);
-
-    m_accionesElementos.nitrogeno = new QAction(tr("Nitrógeno (N)"), this);
-    m_accionesElementos.nitrogeno->setCheckable(true);
-
-    m_accionesElementos.modoSeleccion = new QAction(tr("Seleccionar / Puntero"), this);
+    // TEXTOS CORTOS: Evitan que el botón reviente o se corte el texto
+    m_accionesElementos.modoSeleccion = new QAction(tr("Seleccionar"), this);
     m_accionesElementos.modoSeleccion->setCheckable(true);
+    m_accionesElementos.modoSeleccion->setIcon(QIcon(":/iconos/puntero.png"));
+    m_accionesElementos.modoSeleccion->setToolTip(tr("Herramienta de Selección / Puntero")); // <-- Explicación larga aquí
 
-    m_accionesElementos.modoEnlace = new QAction(tr("Crear Enlace"), this);
+    m_accionesElementos.modoEnlace = new QAction(tr("Enlace"), this);
     m_accionesElementos.modoEnlace->setCheckable(true);
+    m_accionesElementos.modoEnlace->setIcon(QIcon(":/iconos/enlace.png"));
+    m_accionesElementos.modoEnlace->setToolTip(tr("Crear un nuevo enlace entre átomos"));
 
-    m_accionesElementos.modoRotar = new QAction(tr("Rotar Molécula"), this);
+    m_accionesElementos.modoRotar = new QAction(tr("Rotar"), this);
     m_accionesElementos.modoRotar->setCheckable(true);
+    m_accionesElementos.modoRotar->setIcon(QIcon(":/iconos/rotar3d.png"));
+    m_accionesElementos.modoRotar->setToolTip(tr("Rotar la molécula en el espacio 3D"));
 
+    m_barraElementos->addAction(m_accionesElementos.modoSeleccion);
+    m_barraElementos->addAction(m_accionesElementos.modoEnlace);
+    m_barraElementos->addAction(m_accionesElementos.modoRotar);
+
+    m_barraElementos->addSeparator();
+
+    // --- SUBSECCIÓN B: ELEMENTOS QUÍMICOS VIGENTES ---
+    QLabel* lblSeccionElementos = new QLabel(tr(" ELEMENTOS"), this);
+    lblSeccionElementos->setStyleSheet("color: #666666; font-weight: bold; font-size: 11px; padding: 14px 0px 6px 6px;");
+    m_barraElementos->addWidget(lblSeccionElementos);
+
+    m_accionesElementos.carbono = new QAction(tr("Carbono"), this);
+    m_accionesElementos.carbono->setCheckable(true);
+    m_accionesElementos.carbono->setIcon(QIcon(":/iconos/atomo_c.png"));
+
+    m_accionesElementos.hidrogeno = new QAction(tr("Hidrógeno"), this);
+    m_accionesElementos.hidrogeno->setCheckable(true);
+    m_accionesElementos.hidrogeno->setIcon(QIcon(":/iconos/atomo_h.png"));
+
+    m_accionesElementos.oxigeno = new QAction(tr("Oxígeno"), this);
+    m_accionesElementos.oxigeno->setCheckable(true);
+    m_accionesElementos.oxigeno->setIcon(QIcon(":/iconos/atomo_o.png"));
+
+    m_accionesElementos.nitrogeno = new QAction(tr("Nitrógeno"), this);
+    m_accionesElementos.nitrogeno->setCheckable(true);
+    m_accionesElementos.nitrogeno->setIcon(QIcon(":/iconos/atomo_n.png"));
+
+    m_barraElementos->addAction(m_accionesElementos.carbono);
+    m_barraElementos->addAction(m_accionesElementos.hidrogeno);
+    m_barraElementos->addAction(m_accionesElementos.oxigeno);
+    m_barraElementos->addAction(m_accionesElementos.nitrogeno);
+
+    m_barraElementos->addSeparator(); // Separador visual sutil
+
+    m_accionesElementos.tablaPeriodica = new QAction(tr("Más..."), this);
+    m_accionesElementos.tablaPeriodica->setIcon(QIcon(":/iconos/tabla_periodica.png")); // Asegúrate de tener este icono
+    m_accionesElementos.tablaPeriodica->setToolTip(tr("Abrir la Tabla Periódica completa"));
+
+    m_barraElementos->addAction(m_accionesElementos.tablaPeriodica);
+
+    // =========================================================================
+    // EXCLUSIVIDAD: CONFIGURACIÓN DEL GRUPO DE ACCIONES (MUTUAMENTE EXCLUSIVOS)
+    // =========================================================================
     m_grupoElementos = new QActionGroup(this);
     m_grupoElementos->addAction(m_accionesElementos.carbono);
     m_grupoElementos->addAction(m_accionesElementos.hidrogeno);
@@ -235,17 +287,6 @@ void MoleculaVista::initToolBars(){
     m_grupoElementos->addAction(m_accionesElementos.modoEnlace);
     m_grupoElementos->addAction(m_accionesElementos.modoRotar);
     m_grupoElementos->setExclusive(true);
-
-    m_barraElementos->addAction(m_accionesElementos.carbono);
-    m_barraElementos->addAction(m_accionesElementos.hidrogeno);
-    m_barraElementos->addAction(m_accionesElementos.oxigeno);
-    m_barraElementos->addAction(m_accionesElementos.nitrogeno);
-    m_barraElementos->addSeparator();
-    m_barraElementos->addSeparator();
-    m_barraElementos->addSeparator();
-    m_barraElementos->addAction(m_accionesElementos.modoSeleccion);
-    m_barraElementos->addAction(m_accionesElementos.modoEnlace);
-    m_barraElementos->addAction(m_accionesElementos.modoRotar);
 }
 
 void MoleculaVista::initPanelConsola(){
@@ -628,14 +669,58 @@ void MoleculaVista::setTemaApp(){
         "}"
 
         // Ajuste barra de elementos (Adiós a los 120px forzados incómodos)
-        "QToolBar#barraElementos QToolButton { "
-        "   min-width: 160px; "         /* <--- Fuerzas el ancho mínimo */
-        "   max-width: 160px; "         /* <--- Fuerzas el ancho máximo (juntos hacen ancho fijo) */
-        "   text-align: left; "         /* <--- Alinea el texto a la izquierda para un look limpio */
-        "   padding: 8px 12px; "        /* <--- Espaciado interno cómodo */
-        "   font-size: 14px; "          /* <--- Tamaño de letra legible que configuramos antes */
-        "   margin-bottom: 2px; "       /* <--- Separación sutil vertical entre botones */
+        "QToolBar#barraElementos { "
+        "   background-color: #1e1e1e; "
+        "   border-right: 1px solid #2d2d2d; "
+        "   spacing: 4px; "                     /* Espaciado vertical mínimo y elegante */
+        "   padding: 8px 4px; "
         "}"
+
+        "QToolBar#barraElementos QToolButton { "
+        "   min-width: 82px; "                  /* ¡REDUCIDO! Ancho optimizado al tamaño de la palabra */
+        "   max-width: 82px; "
+        "   min-height: 54px; "                 /* Altura compacta para la pila vertical */
+        "   max-height: 54px; "
+        "   text-align: center; "               /* Centrado absoluto */
+        "   padding: 4px 2px; "
+        "   font-size: 11px; "                  /* Tipografía sutil típica de paneles de herramientas */
+        "   border: 1px solid transparent; "    /* Sin borde por defecto para limpiar la vista */
+        "   border-radius: 4px; "
+        "   background-color: transparent; "     /* Fondo plano; se integra con la barra */
+        "   color: #aaaaaa; "                   /* Color atenuado profesional */
+        "   icon-size: 20px 20px; "             /* Proporción ideal respecto al texto */
+        "}"
+
+        /* Configuramos la propiedad nativa de Qt desde la hoja de estilos */
+        "QToolBar#barraElementos QToolButton { "
+        "   qproperty-toolButtonStyle: ToolButtonTextUnderIcon; "
+        "}"
+
+        /* Efecto Hover: Aparición suave al pasar el ratón */
+        "QToolBar#barraElementos QToolButton:hover { "
+        "   background-color: #2d2d30; "
+        "   color: #ffffff; "
+        "   border: 1px solid #3f3f46; "
+        "}"
+
+        /* Efecto Hundido / Activo: Resaltado de herramienta seleccionada */
+        "QToolBar#barraElementos QToolButton:checked { "
+        "   background-color: #1c3d6e; "         /* Azul marino atenuado */
+        "   border: 1px solid #0f52ba; "         /* Borde zafiro */
+        "   color: #ffffff; "
+        "   font-weight: bold; "
+        "   border-left: 3px solid #0f52ba; "   /* Detalle premium en el flanco izquierdo */
+        "}"
+        /* Estilo específico para el botón de la Tabla Periódica (cambia el color del texto a azul para invitar al clic) */
+        "QToolBar#barraElementos QToolButton[text=\"Más...\"] { "
+        "   color: #3b82f6; "
+        "   font-weight: bold; "
+        "}"
+        "QToolBar#barraElementos QToolButton[text=\"Más...\"]:hover { "
+        "   background-color: #1c3d6e; "
+        "   color: #ffffff; "
+        "}"
+
 
         // Lienzo Central
         "QGraphicsView#visorMolecular { "

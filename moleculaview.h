@@ -2,25 +2,21 @@
 #define MOLECULAVIEW_H
 
 #include <QObject>
-#include <QVector3D>
 #include <QString>
+#include <QVector>
+#include <QVector3D>
 
-// =========================================================================
-// ESTRUCTURAS DE DATOS ORIGINALES
-// =========================================================================
-
-// Representa la información química y la ubicación en pantalla de un átomo
+// Structures necesarias para el negocio molecular
 struct Atomo {
-    int         id;        // Identificador único y numérico para cada átomo (0, 1, 2...)
-    QString     simbolo;    // Símbolo químico del elemento (Ej: "C", "H", "O", "N")
-    QVector3D   posicion;  // Coordenadas bidimensionales (X, Y) del átomo en el lienzo de dibujo
+    int id;
+    QString simbolo;
+    QVector3D posicion;
 };
 
-// Representa la unión covalente o enlace químico entre dos átomos
 struct Enlace {
-    int id_atomo1;      // ID del átomo donde inicia el enlace
-    int id_atomo2;      // ID del átomo donde termina el enlace
-    int orden;          // Enlace sencillo = 1, doble = 2, y triple = 3
+    int id_atomo1;
+    int id_atomo2;
+    int orden; // 1 = Simple, 2 = Doble, 3 = Triple
 };
 
 class MoleculaView : public QObject
@@ -28,80 +24,113 @@ class MoleculaView : public QObject
     Q_OBJECT
 
 public:
-
-    // 1.- Catalogo Limpio de los estado en los que puede estar el editor
-    enum ModoEditor{
-        ModoSeleccion,      // Puntero neutro (Mide distancias, activa clic derecho)
-        ModoDibujo,         // Modo de adiccion de atomos
-        ModoCrearEnlace,    // Unir dos átomos
-        ModoRotacion3D      // Rotar la cámara del lienzo
+    // Enumeraciones del sistema
+    enum ModoEditor {
+        ModoSeleccion,
+        ModoDibujo,
+        ModoCrearEnlace,
+        ModoRotacion3D
     };
 
-    struct ModoLienzo{
+    struct ModoLienzo {
         bool estaVacio      = true;
         bool estaGuardado   = false;
         bool estaIniciado   = false;
     };
 
+    // =========================================================================
+    // ZONA: CICLO DE VIDA DEL CEREBRO DE NEGOCIO
+    // =========================================================================
+public:
     explicit MoleculaView(QObject *parent = nullptr);
     ~MoleculaView() override;
 
-    // 2. Métodos de control que invocará la Vista al interactuar
+    //#########################################################################
+    // ZONA: FUNCIONES PÚBLICAS (CONTROL DE ESTADOS Y HERRAMIENTAS)
+    //#########################################################################
+public:
     void setModoEditor(const ModoEditor& nuevoModo);
     void setElementoActivo(const QString& simbolo);
     void setNuevoProyecto();
-    void cerrarProyecto();
+
+    //#########################################################################
+    // ZONA: FUNCIONES PÚBLICAS (INTERACCIÓN CON EL ESCENARIO / RATÓN)
+    //#########################################################################
+public:
     void setClick(const QVector3D& posClick);
     void setClickDerecho(const QVector3D& posClickDerecho);
-    void limpiarLienzo();
+
+    //#########################################################################
+    // ZONA: FUNCIONES PÚBLICAS (GESTOR DE MEMORIA Y ELIMINACIÓN)
+    //#########################################################################
+public:
     void delAtomo(const int& idAtomo);
     void delEnlace(const int& idEnlace);
+    void limpiarLienzo();
+    void cerrarProyecto();
 
+    // =========================================================================
+    // ZONA: GETTERS DE ACCESO A DATOS (SOLO LECTURA)
+    // =========================================================================
+public:
+    ModoEditor getModoEditor();
+    QString getSimboloAtomoActivo();
+    QVector<Atomo> getListaAtomos();
+    QVector<Enlace> getListaEnlaces();
+    int getIdAtomoSeleccionado();
+    ModoLienzo getModoLienzo();
 
-
-    // 3. Consultores de estado
-    ModoEditor          getModoEditor();
-    ModoLienzo          getModoLienzo();
-    QString             getSimboloAtomoActivo();
-    QVector<Atomo>      getListaAtomos();
-    QVector<Enlace>     getListaEnlaces();
-    int                 getIdAtomoSeleccionado();
-
-signals:
-
-    // 4. Señales para ordenar a la Vista que se actualice
-    void modoEditorCambiado(const MoleculaView::ModoEditor& nuevoModo);
-    void modoLienzoCambiado(const MoleculaView::ModoLienzo& nuevoModo);
-    void setMenuEliminar(const int& idAtomo, const int& idEnlace);
-    void actualizarLienzo();
-    void notificarMensajeEstado(const QString& mensaje);
-
+    //#########################################################################
+    // ZONA: INTERNA / PRIVADA (LÓGICA DE NEGOCIO CEREBRAL)
+    //#########################################################################
 private:
+    void setElementoSeleccionado(int idAtomoSeleccionado);
+    void procesarClickDibujoAtomo(const QVector3D& posClick);
+    void procesarClickSeleccion(const QVector3D& posClick);
+    void procesarClickCrearEnlace(const QVector3D& posClick);
+    void procesarClickRotacion(const QVector3D& posClick);
 
-    // 5. Estado interno privado (El cerebro)
-    ModoEditor          m_modoActual            = ModoEditor::ModoSeleccion;
-    ModoLienzo          m_modoLienzo;
-    int                 m_contadorIds           = 0;
-    QString             m_atomoActivo           = "";
-    int                 m_idAtomoSeleccionado   = -1;
-    QVector<Atomo>      m_listaAtomos;
-    QVector<Enlace>     m_listaEnlaces;
+    // =========================================================================
+    // ZONA: GESTOR CENTRALIZADO DE LA SALUD DEL DOCUMENTO
+    // =========================================================================
+private:
+    void setModoLienzo(const ModoLienzo& modoLienzo);
+    void setMensajeEstado();
 
-    // 6.- Funciones Privadas solo invocadas por el View
-    void    procesarClickDibujoAtomo(const QVector3D& posClick);
-    void    procesarClickSeleccion(const QVector3D& posClick);
-    void    procesarClickCrearEnlace(const QVector3D& posClick);
-    void    procesarClickRotacion(const QVector3D& posClick);
-    void    setElementoSeleccionado(int idAtomoSelecccionado);
-    void    setModoLienzo(const ModoLienzo& modoLienzo);
-    int     getIdAtomoFromPos(const QVector3D& pos3D);
-    int     getValenciaMax(const Atomo& atomo);
-    int     getEnlaces(const Atomo& atomo);
-    int     getElectronesValenciaNaturales(const Atomo& atomo);
-    bool    isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2);
-    void    setMensajeEstado();
-    float   getDistanciaPuntoSegmento(const QVector3D& punto, const QVector3D& pos1, const QVector3D& pos2);
+    // =========================================================================
+    // ZONA: VALIDACIONES Y AUXILIARES QUÍMICOS / MATEMÁTICOS
+    // =========================================================================
+private:
+    int getIdAtomoFromPos(const QVector3D& posClick);
+    int getValenciaMax(const Atomo& atomo);
+    bool isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2);
+    int getElectronesValenciaNaturales(const Atomo& atomo);
+    int getEnlaces(const Atomo& atomo);
+    float getDistanciaPuntoSegmento(const QVector3D& punto, const QVector3D& pos1, const QVector3D& pos2);
 
+    // =========================================================================
+    // ZONA: SEÑALES DE NOTIFICACIÓN (MOBILES DE SINCRONIZACIÓN)
+    // =========================================================================
+signals:
+    void actualizarLienzo();
+    void modoEditorCambiado(MoleculaView::ModoEditor modo);
+    void modoLienzoCambiado(MoleculaView::ModoLienzo modo);
+    void notificarMensajeEstado(const QString& mensaje);
+    void setMenuEliminar(const int& idAtomo, const int& idEnlace);
+
+    // =========================================================================
+    // ZONA: ALMACÉN FÍSICO DE VARIABLES PRIVADAS (ESTADOS Y MEMORIA)
+    // =========================================================================
+private:
+    ModoEditor     m_modoActual;
+    ModoLienzo     m_modoLienzo;
+    QString        m_atomoActivo;
+
+    QVector<Atomo>  m_listaAtomos;
+    QVector<Enlace> m_listaEnlaces;
+
+    int            m_contadorIds         = 0;
+    int            m_idAtomoSeleccionado = -1;
 };
 
 #endif // MOLECULAVIEW_H

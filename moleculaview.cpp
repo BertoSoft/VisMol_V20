@@ -2,6 +2,10 @@
 
 #include <QObject>
 
+// =========================================================================
+// ZONA: CICLO DE VIDA DEL CEREBRO DE NEGOCIO
+// =========================================================================
+
 MoleculaView::MoleculaView(QObject *parent)
     : QObject(parent){
 
@@ -17,9 +21,9 @@ MoleculaView::~MoleculaView(){
 
 }
 
-//##############################################################
-// Funciones Públicas
-//################################################################
+//#########################################################################
+// ZONA: FUNCIONES PÚBLICAS (CONTROL DE ESTADOS Y HERRAMIENTAS)
+//#########################################################################
 
 void MoleculaView::setModoEditor(const ModoEditor& nuevoModo){
 
@@ -61,6 +65,10 @@ void MoleculaView::setNuevoProyecto(){
     setModoEditor(ModoSeleccion);
     setModoLienzo(modo);
 }
+
+//#########################################################################
+// ZONA: FUNCIONES PÚBLICAS (INTERACCIÓN CON EL ESCENARIO / RATÓN)
+//#########################################################################
 
 void MoleculaView::setClick(const QVector3D& posClick){
     switch(m_modoActual) {
@@ -133,6 +141,10 @@ void MoleculaView::setClickDerecho(const QVector3D& posClickDerecho){
         emit setMenuEliminar(idAtomo, idEnlace);
     }
 }
+
+//#########################################################################
+// ZONA: FUNCIONES PÚBLICAS (GESTOR DE MEMORIA Y ELIMINACIÓN)
+//#########################################################################
 
 void MoleculaView::delAtomo(const int& idAtomo){
     // 1.- INTEGRIDAD QUÍMICA CRÍTICA: Eliminamos los enlaces recorriendo el vector al revés
@@ -212,6 +224,10 @@ void MoleculaView::cerrarProyecto(){
     setModoLienzo(modo);
 }
 
+// =========================================================================
+// ZONA: GETTERS DE ACCESO A DATOS (SOLO LECTURA)
+// =========================================================================
+
 MoleculaView::ModoEditor MoleculaView::getModoEditor(){
 
     return m_modoActual;
@@ -234,9 +250,9 @@ int MoleculaView::getIdAtomoSeleccionado(){
     return m_idAtomoSeleccionado;
 }
 
-//################################################################
-// Funciones Privadas de MoleculaView
-//################################################################
+//#########################################################################
+// ZONA: INTERNA / PRIVADA (LÓGICA DE NEGOCIO CEREBRAL)
+//#########################################################################
 
 void MoleculaView::setElementoSeleccionado(int idAtomoSeleccionado){
 
@@ -257,10 +273,6 @@ void MoleculaView::procesarClickDibujoAtomo(const QVector3D& posClick) {
         setModoLienzo(m_modoLienzo);
     }
 
-}
-
-MoleculaView::ModoLienzo MoleculaView::getModoLienzo(){
-    return m_modoLienzo;
 }
 
 void MoleculaView::procesarClickSeleccion(const QVector3D& posClick) {
@@ -351,6 +363,10 @@ void MoleculaView::procesarClickCrearEnlace(const QVector3D& posClick) {
 void MoleculaView::procesarClickRotacion(const QVector3D& posClick) {
 }
 
+// =========================================================================
+// ZONA: GESTOR CENTRALIZADO DE LA SALUD DEL DOCUMENTO
+// =========================================================================
+
 void MoleculaView::setModoLienzo(const ModoLienzo& modoLienzo){
     // 1. Calculamos la realidad objetiva de los almacenes de memoria
     bool vacioAhora = m_listaAtomos.isEmpty() && m_listaEnlaces.isEmpty();
@@ -370,6 +386,42 @@ void MoleculaView::setModoLienzo(const ModoLienzo& modoLienzo){
 
     setMensajeEstado();
 }
+
+MoleculaView::ModoLienzo MoleculaView::getModoLienzo(){
+    return m_modoLienzo;
+}
+
+void MoleculaView::setMensajeEstado(){
+    // Si el proyecto NO ha sido iniciado o está en letargo, mandamos el texto de bloqueo
+    if (!m_modoLienzo.estaIniciado) {
+        emit notificarMensajeEstado(tr(" Proyecto Vacío. Cree un nuevo lienzo o abra un archivo para comenzar."));
+        return;
+    }
+
+    // Evaluamos la herramienta activa actual en el negocio
+    switch(m_modoActual) {
+    case MoleculaView::ModoSeleccion:
+        emit notificarMensajeEstado(tr(" Herramienta activa: Modo Seleccion (Puntero Neutro)."));
+        break;
+
+    case MoleculaView::ModoDibujo:
+        emit notificarMensajeEstado(tr(" Herramienta activa: Dibujando Átomo de %1.").arg(m_atomoActivo));
+        break;
+
+    case MoleculaView::ModoCrearEnlace:
+        emit notificarMensajeEstado(tr(" Herramienta activa: Modo Enlace Covalente habilitado."));
+        break;
+
+    case MoleculaView::ModoRotacion3D:
+        emit notificarMensajeEstado(tr(" Herramienta activa: Modo Rotación y Vista 3D."));
+        break;
+    }
+}
+
+
+// =========================================================================
+// ZONA: VALIDACIONES Y AUXILIARES QUÍMICOS / MATEMÁTICOS
+// =========================================================================
 
 int MoleculaView::getIdAtomoFromPos(const QVector3D& posClick){
     for(const Atomo& atomo: m_listaAtomos){
@@ -488,33 +540,6 @@ int MoleculaView::getEnlaces(const Atomo& atomo){
         }
     }
     return totalEnlaces;
-}
-
-void MoleculaView::setMensajeEstado(){
-    // Si el proyecto NO ha sido iniciado o está en letargo, mandamos el texto de bloqueo
-    if (!m_modoLienzo.estaIniciado) {
-        emit notificarMensajeEstado(tr(" Proyecto Vacío. Cree un nuevo lienzo o abra un archivo para comenzar."));
-        return;
-    }
-
-    // Evaluamos la herramienta activa actual en el negocio
-    switch(m_modoActual) {
-    case MoleculaView::ModoSeleccion:
-        emit notificarMensajeEstado(tr(" Herramienta activa: Modo Seleccion (Puntero Neutro)."));
-        break;
-
-    case MoleculaView::ModoDibujo:
-        emit notificarMensajeEstado(tr(" Herramienta activa: Dibujando Átomo de %1.").arg(m_atomoActivo));
-        break;
-
-    case MoleculaView::ModoCrearEnlace:
-        emit notificarMensajeEstado(tr(" Herramienta activa: Modo Enlace Covalente habilitado."));
-        break;
-
-    case MoleculaView::ModoRotacion3D:
-        emit notificarMensajeEstado(tr(" Herramienta activa: Modo Rotación y Vista 3D."));
-        break;
-    }
 }
 
 float MoleculaView::getDistanciaPuntoSegmento(const QVector3D& punto, const QVector3D& pos1, const QVector3D& pos2){

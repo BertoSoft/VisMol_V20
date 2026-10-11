@@ -13,5 +13,13 @@
         <file>iconos/deshacer.png</file>
         <file>iconos/configurar.png</file>
         <file>iconos/limpiar.png</file>
+        <file>iconos/rotar3d.png</file>
+        <file>iconos/puntero.png</file>
+        <file>iconos/enlace.png</file>
+        <file>iconos/atomo_o.png</file>
+        <file>iconos/atomo_n.png</file>
+        <file>iconos/atomo_h.png</file>
+        <file>iconos/atomo_c.png</file>
+        <file>iconos/tabla_periodica.png</file>
     </qresource>
 </RCC>
