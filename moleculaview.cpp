@@ -1,6 +1,10 @@
 #include "moleculaview.h"
 
 #include <QObject>
+#include <QFile>
+#include <QTextStream>
+#include <QRegularExpression>
+
 
 // =========================================================================
 // ZONA: CICLO DE VIDA DEL CEREBRO DE NEGOCIO
@@ -64,6 +68,174 @@ void MoleculaView::setNuevoProyecto(){
 
     setModoEditor(ModoSeleccion);
     setModoLienzo(modo);
+}
+
+bool MoleculaView::loadFile(const QString& ruta){
+    // Control de seguridad inicial para evitar rutas vacías
+    if (ruta.isEmpty()) return false;
+
+    QFile archivo(ruta);
+    // Abrimos el archivo en modo lectura y forzamos el tratamiento de texto plano
+    if (!archivo.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return false;
+    }
+
+    // =========================================================================
+    // FASE 1: LIMPIEZA ABSOLUTA DE LA MEMORIA ACTUAL
+    // =========================================================================
+    m_idAtomoSeleccionado = -1;
+    m_listaAtomos.clear();
+    m_listaEnlaces.clear();
+    m_contadorIds = 0;
+
+    QTextStream entrada(&archivo);
+
+    // =========================================================================
+    // FASE 2: IGNORAR LAS 3 LÍNEAS DE CABECERA DE MOPAC (COMENTARIOS)
+    // =========================================================================
+    for (int i = 0; i < 3; ++i) {
+        if (!entrada.atEnd()) {
+            entrada.readLine(); // Desestima la línea leída
+        }
+    }
+
+    // =========================================================================
+    // FASE 3: LECTURA SECUENCIAL LÍNEA A LÍNEA Y PARSEO POR BLOQUES
+    // =========================================================================
+    int temporalIds = 0;
+    bool procesandoEnlaces = false; // Flag conmutador de sección
+    bool seHaLeidoAlgoValido = false; // Control de integridad del formato
+
+    while (!entrada.atEnd()) {
+        QString linea = entrada.readLine().trimmed();
+        if (linea.isEmpty()) continue; // Salta líneas vacías e intermedias
+
+        // Si topamos con la etiqueta de control, conmutamos al bloque de conectividad
+        if (linea == "[ENLACES]") {
+            procesandoEnlaces = true;
+            continue;
+        }
+
+        // Divide la línea ignorando acumulaciones de espacios o tabuladores múltiples
+        QStringList tokens = linea.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+
+        // ------------------------------------------------=====================
+        // BLOQUE A: Parseo de Átomos (Formato MOPAC: Símbolo X 1 Y 1 Z 1)
+        // ------------------------------------------------=====================
+        if (!procesandoEnlaces && tokens.size() >= 7) {
+            Atomo atomo;
+
+            atomo.id      = temporalIds;
+            atomo.simbolo = tokens[0].trimmed();
+
+            // Las posiciones cartesianas en MOPAC se guardan en las columnas estables 1, 3 y 5
+            float x = tokens[1].toFloat();
+            float y = tokens[3].toFloat();
+            float z = tokens[5].toFloat();
+
+            atomo.posicion = QVector3D(x, y, z);
+
+            m_listaAtomos.append(atomo);
+            temporalIds++;
+            seHaLeidoAlgoValido = true;
+        }
+        // ------------------------------------------------=====================
+        // BLOQUE B: Parseo de Enlaces explícitos (Formato: ID1 ID2 Orden)
+        // ------------------------------------------------=====================
+        else if (procesandoEnlaces && tokens.size() >= 3) {
+            Enlace enlace;
+
+            enlace.id_atomo1 = tokens[0].toInt();
+            enlace.id_atomo2 = tokens[1].toInt();
+            enlace.orden     = tokens[2].toInt();
+
+            m_listaEnlaces.append(enlace);
+            seHaLeidoAlgoValido = true;
+        }
+    }
+    archivo.close();
+
+    // Sincronizamos nuestro contador interno global con los átomos reales inyectados
+    m_contadorIds = temporalIds;
+
+    // Si el archivo se leyó pero no contenía ninguna estructura válida, reportamos fallo
+    if (!seHaLeidoAlgoValido) {
+        return false;
+    }
+
+    // =========================================================================
+    // FASE 4: REGENERACIÓN DE LA SALUD DEL DOCUMENTO Y REPINTADO DE LA UI
+    // =========================================================================
+    ModoLienzo nuevoModo;
+    nuevoModo.estaIniciado = true;
+    nuevoModo.estaVacio    = m_listaAtomos.isEmpty();
+    nuevoModo.estaGuardado = true; // Al abrir un archivo intacto, nace en estado guardado
+
+    // Dispara las señales automáticas hacia la UI y el lienzo para renderizar todo
+    setModoLienzo(nuevoModo);
+
+    return true; // Éxito absoluto en la carga
+}
+
+void MoleculaView::saveFile(const QString& ruta){
+    // Control de seguridad inicial para evitar rutas vacías
+    if (ruta.isEmpty()) return;
+
+    QFile archivo(ruta);
+    // Abrimos en modo solo escritura y forzamos el tratamiento de texto plano limpio
+    if (!archivo.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return;
+    }
+
+    QTextStream salida(&archivo);
+
+    // =========================================================================
+    // FASE 1: CABECERA ESTRICTA MOPAC (Las 3 líneas iniciales obligatorias)
+    // =========================================================================
+    // Línea 1: Tu firma personalizada exigida por los requisitos del sistema
+    salida << "#VisMol V2.0 NATIVE MOLECULAR FILE\n";
+
+    // Línea 2: Título del proyecto o comentario libre exigido por MOPAC
+    salida << "Molecula generada con VisorMol_V20\n";
+
+    // Línea 3: Línea de comentarios adicional obligatoria
+    salida << "Coordenadas Cartesianas con flags de optimizacion activos (1)\n";
+
+    // =========================================================================
+    // FASE 2: BLOQUE DE ÁTOMOS EN FORMATO CARTECIANO COMPATIBLE MOPAC
+    // =========================================================================
+    // Configuramos el formateo de números reales a formato decimal fijo con 4 decimales
+    salida.setRealNumberNotation(QTextStream::FixedNotation);
+    salida.setRealNumberPrecision(4);
+
+    for (const Atomo& atomo : m_listaAtomos) {
+        // Los tabuladores '\t' garantizan que las columnas queden perfectamente alineadas en disco
+        salida << atomo.simbolo << "\t"
+               << atomo.posicion.x() << "\t1\t"
+               << atomo.posicion.y() << "\t1\t"
+               << atomo.posicion.z() << "\t1\n";
+    }
+
+    // =========================================================================
+    // FASE 3: SECCIÓN DE ENLACES EXPLÍCITOS DE DISEÑO
+    // =========================================================================
+    salida << "[ENLACES]\n";
+    for (const Enlace& enlace : m_listaEnlaces) {
+        salida << enlace.id_atomo1 << "\t"
+               << enlace.id_atomo2 << "\t"
+               << enlace.orden << "\n";
+    }
+
+    // Cerramos el canal del sistema operativo de forma limpia
+    archivo.close();
+
+    // =========================================================================
+    // FASE 4: ACTUALIZACIÓN CENTRALIZADA DE LA PERSISTENCIA
+    // =========================================================================
+    m_modoLienzo.estaGuardado = true;
+
+    // Notificamos a la UI para quitar asteriscos del título y bloquear el botón guardar
+    setModoLienzo(m_modoLienzo);
 }
 
 //#########################################################################
@@ -282,8 +454,10 @@ void MoleculaView::procesarClickCrearEnlace(const QVector3D& posClick) {
     int idAtomoActual = getIdAtomoFromPos(posClick);
     if(idAtomoActual < 0) return;
 
+    // =========================================================================
+    // FASE 1: SELECCIÓN DEL PRIMER ÁTOMO (ÁTOMO 1)
+    // =========================================================================
     if(m_idAtomoSeleccionado < 0){
-        // 1. Buscamos primero la estructura completa del átomo pulsado en memoria
         Atomo atomoPulsado;
         bool encontrado = false;
         for(const Atomo& a : m_listaAtomos) {
@@ -298,27 +472,27 @@ void MoleculaView::procesarClickCrearEnlace(const QVector3D& posClick) {
             int enlacesActuales = getEnlaces(atomoPulsado);
             int valenciaMaxima  = getValenciaMax(atomoPulsado);
 
-            // 2. ¡Filtro Químico!: Si está saturado o tiene 3 enlaces, salimos limpios
-            // sin alterar m_idAtomoSeleccionado (se mantiene seguro en -1)
-            if(enlacesActuales >= valenciaMaxima || enlacesActuales == 3) {
+            // CORREGIDO: Eliminamos "|| enlacesActuales == 3".
+            // Ahora un Carbono con 3 enlaces (como el de tu carbonilo) SÍ se puede seleccionar
+            // porque su valencia máxima es 4 y aún le queda un electrón libre.
+            if(enlacesActuales >= valenciaMaxima) {
                 return;
             }
         }
 
-        // 3. Si pasó el filtro con éxito, guardamos la selección y pintamos el anillo
         m_idAtomoSeleccionado = idAtomoActual;
         setModoLienzo(m_modoLienzo);
         return;
     }
 
-    // Si llegamos aqui, estamos ante el atomo2 seleccionado
+    // =========================================================================
+    // FASE 2: SELECCIÓN DEL SEGUNDO ÁTOMO (ÁTOMO 2) Y CONECTIVIDAD
+    // =========================================================================
     int idAtomo1 = m_idAtomoSeleccionado;
     int idAtomo2 = idAtomoActual;
 
-    m_idAtomoSeleccionado = -1;
+    m_idAtomoSeleccionado = -1; // Limpiamos la selección inmediatamente
 
-
-    // 3. Recuperamos las estructuras Atomo completas del vector de memoria
     Atomo atomo1, atomo2;
     bool encontrado1 = false, encontrado2 = false;
     for(const Atomo& a : m_listaAtomos) {
@@ -327,36 +501,33 @@ void MoleculaView::procesarClickCrearEnlace(const QVector3D& posClick) {
         if(encontrado1 && encontrado2) break;
     }
 
-    // =========================================================================
-    // CASO A: EL ENLACE YA EXISTE -> EVALUAMOS INCREMENTAR SU ORDEN (1 -> 2 -> 3)
-    // =========================================================================
+    // Evaluamos si ya existe una conexión previa entre estos dos átomos específicos
     for(Enlace &enlace : m_listaEnlaces){
         if((enlace.id_atomo1 == idAtomo1 && enlace.id_atomo2 == idAtomo2) ||
             (enlace.id_atomo1 == idAtomo2 && enlace.id_atomo2 == idAtomo1)) {
 
-            // Si ya es triple (orden 3), hemos llegado al límite químico permitido
+            // Aquí es donde SÍ prima el orden de enlace local:
+            // Si ya es un enlace triple entre ellos dos, bloqueamos el incremento.
             if(enlace.orden >= 3) return;
 
-            // Verificamos si los átomos admiten absorber un orden más en sus valencias
+            // Verificamos si ambos átomos tienen valencia libre para absorber el nuevo orden (1->2 o 2->3)
             if(isEnlacePosible(atomo1, atomo2)){
-                enlace.orden++;              // Incrementamos el orden (Pasa a doble o triple)
-                setModoLienzo(m_modoLienzo); // Notificamos a la vista para repintar
+                enlace.orden++;
+                setModoLienzo(m_modoLienzo);
             }
-            return; // ¡IMPORTANTE! Salimos de la función aquí para evitar que se ejecute el código de abajo
+            return;
         }
     }
 
-    // =========================================================================
-    // CASO B: EL ENLACE NO EXISTE -> CREAMOS UN ENLACE NUEVO DESDE CERO (ORDEN 1)
-    // =========================================================================
+    // Si el enlace no existía entre ellos, intentamos crear un enlace simple nuevo (orden 1)
     if(isEnlacePosible(atomo1, atomo2)){
         Enlace nuevoEnlace;
         nuevoEnlace.id_atomo1 = idAtomo1;
         nuevoEnlace.id_atomo2 = idAtomo2;
-        nuevoEnlace.orden     = 1; // Todo enlace nuevo nace siendo simple
+        nuevoEnlace.orden     = 1;
 
         m_listaEnlaces.append(nuevoEnlace);
-        setModoLienzo(m_modoLienzo); // Notificamos e invocamos actualizarLienzo()
+        setModoLienzo(m_modoLienzo);
     }
 }
 

@@ -36,7 +36,8 @@ private:
     // =========================================================================
     void initUi();
     void initMenu();
-    void initToolBars();
+    void initToolBarSuperior();
+    void initToolBarIzda();
     void initAnimacionBar();
     void initDockPanels();
     void initPanelConsola();
@@ -157,7 +158,9 @@ private:
     // Funciones Privadas
     //#####################################################################
 
-    bool sePuedeCerrar();
-    void setMenuBotonDerecho(const int& idAtomo, const int& idEnlace);
+    bool    sePuedeCerrar();
+    QString dialogoAbrirArchivo();
+    QString dialogoGuardarArchivo();
+    void    setMenuBotonDerecho(const int& idAtomo, const int& idEnlace);
 };
 #endif // MOLECULAVISTA_H

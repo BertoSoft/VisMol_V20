@@ -10,6 +10,7 @@
 #include <QCloseEvent>
 #include <QMessageBox>
 #include <QCursor>
+#include <QFileDialog>
 
 // =========================================================================
 // ZONA: CICLO DE VIDA DE LA VENTANA
@@ -58,6 +59,34 @@ void MoleculaVista::setMoleculaView(MoleculaView* view){
 // =========================================================================
 // ZONA: Funciones Privadas
 // =========================================================================
+
+QString MoleculaVista::dialogoAbrirArchivo(){
+    return QFileDialog::getOpenFileName(
+        this,
+        tr("Abrir Proyecto VisMol"),
+        "",
+        tr("Archivos de MOPAC / VisMol / XYZ (*.mop *.vismol *.xyz)")
+        );
+}
+
+QString MoleculaVista::dialogoGuardarArchivo(){
+    QString ruta = QFileDialog::getSaveFileName(
+        this,
+        tr("Guardar Proyecto VisMol"),
+        "",
+        tr("Archivos XYZ (*.xyz);;Entradas de MOPAC (*.mop);;Archivos de VisMol (*.vismol)")
+        );
+
+    if(!ruta.isEmpty()){
+        QFileInfo info(ruta);
+        QString extension = info.suffix().toLower();
+
+        if(extension != "xyz" && extension != "mop" && extension != "vismol"){
+            ruta += ".xyz";
+        }
+    }
+    return ruta;
+}
 
 bool MoleculaVista::sePuedeCerrar(){
     if (!m_view) return true;
@@ -123,7 +152,8 @@ void MoleculaVista::initUi(){
     setWindowTitle(NOMBRE_APP);
 
     initMenu();
-    initToolBars();
+    initToolBarSuperior();
+    initToolBarIzda();
     initAnimacionBar();
     initDockPanels();
     initPanelConsola();
@@ -183,7 +213,7 @@ void MoleculaVista::initMenu(){
     m_accionesAnalisis.verLogOut = menuAnalisis->addAction(tr("Ver Log de Salida MOPAC (.out)"), this, &MoleculaVista::verLogOut);
 }
 
-void MoleculaVista::initToolBars(){
+void MoleculaVista::initToolBarSuperior(){
 
 
     // =========================================================================
@@ -205,25 +235,24 @@ void MoleculaVista::initToolBars(){
     m_barraProyecto->addSeparator();
     m_barraProyecto->addAction(m_accionesCalculo.configurarMopac);
 
+
+}
+
+void MoleculaVista::initToolBarIzda(){
+
     // =========================================================================
-    // BARRA LATERAL: HERRAMIENTAS Y ELEMENTOS QUÍMICOS (OPTIMIZADA)
+    // BARRA LATERAL: HERRAMIENTAS Y ELEMENTOS QUÍMICOS (MINIMALISTA)
     // =========================================================================
     m_barraElementos = new QToolBar(tr("Herramientas de Elementos"), this);
     m_barraElementos->setObjectName("barraElementos");
     m_barraElementos->setOrientation(Qt::Vertical);
-    m_barraElementos->setToolButtonStyle(Qt::ToolButtonTextUnderIcon); // Icono debajo del texto
-    addToolBar(Qt::LeftToolBarArea, m_barraElementos);
+    m_barraElementos->setToolButtonStyle(Qt::ToolButtonIconOnly);     addToolBar(Qt::LeftToolBarArea, m_barraElementos);
 
     // --- SUBSECCIÓN A: HERRAMIENTAS DE INTERACCIÓN ---
-    QLabel* lblSeccionModos = new QLabel(tr(" HERRAMIENTAS"), this);
-    lblSeccionModos->setStyleSheet("color: #666666; font-weight: bold; font-size: 11px; padding: 14px 0px 6px 6px;");
-    m_barraElementos->addWidget(lblSeccionModos);
-
-    // TEXTOS CORTOS: Evitan que el botón reviente o se corte el texto
     m_accionesElementos.modoSeleccion = new QAction(tr("Seleccionar"), this);
     m_accionesElementos.modoSeleccion->setCheckable(true);
     m_accionesElementos.modoSeleccion->setIcon(QIcon(":/iconos/puntero.png"));
-    m_accionesElementos.modoSeleccion->setToolTip(tr("Herramienta de Selección / Puntero")); // <-- Explicación larga aquí
+    m_accionesElementos.modoSeleccion->setToolTip(tr("Herramienta de Selección / Puntero"));
 
     m_accionesElementos.modoEnlace = new QAction(tr("Enlace"), this);
     m_accionesElementos.modoEnlace->setCheckable(true);
@@ -239,13 +268,13 @@ void MoleculaVista::initToolBars(){
     m_barraElementos->addAction(m_accionesElementos.modoEnlace);
     m_barraElementos->addAction(m_accionesElementos.modoRotar);
 
+    // Separador visual elegante que divide las herramientas de los elementos
+    m_barraElementos->addSeparator();
+    m_barraElementos->addSeparator();
     m_barraElementos->addSeparator();
 
-    // --- SUBSECCIÓN B: ELEMENTOS QUÍMICOS VIGENTES ---
-    QLabel* lblSeccionElementos = new QLabel(tr(" ELEMENTOS"), this);
-    lblSeccionElementos->setStyleSheet("color: #666666; font-weight: bold; font-size: 11px; padding: 14px 0px 6px 6px;");
-    m_barraElementos->addWidget(lblSeccionElementos);
 
+    // --- SUBSECCIÓN B: ELEMENTOS QUÍMICOS VIGENTES ---
     m_accionesElementos.carbono = new QAction(tr("Carbono"), this);
     m_accionesElementos.carbono->setCheckable(true);
     m_accionesElementos.carbono->setIcon(QIcon(":/iconos/atomo_c.png"));
@@ -267,16 +296,18 @@ void MoleculaVista::initToolBars(){
     m_barraElementos->addAction(m_accionesElementos.oxigeno);
     m_barraElementos->addAction(m_accionesElementos.nitrogeno);
 
-    m_barraElementos->addSeparator(); // Separador visual sutil
+    m_barraElementos->addSeparator();
+    m_barraElementos->addSeparator();
+
 
     m_accionesElementos.tablaPeriodica = new QAction(tr("Más..."), this);
-    m_accionesElementos.tablaPeriodica->setIcon(QIcon(":/iconos/tabla_periodica.png")); // Asegúrate de tener este icono
+    m_accionesElementos.tablaPeriodica->setIcon(QIcon(":/iconos/tabla_periodica.png"));
     m_accionesElementos.tablaPeriodica->setToolTip(tr("Abrir la Tabla Periódica completa"));
 
     m_barraElementos->addAction(m_accionesElementos.tablaPeriodica);
 
     // =========================================================================
-    // EXCLUSIVIDAD: CONFIGURACIÓN DEL GRUPO DE ACCIONES (MUTUAMENTE EXCLUSIVOS)
+    // EXCLUSIVIDAD: CONFIGURACIÓN DEL GRUPO DE ACCIONES
     // =========================================================================
     m_grupoElementos = new QActionGroup(this);
     m_grupoElementos->addAction(m_accionesElementos.carbono);
@@ -438,21 +469,58 @@ void MoleculaVista::nuevoProyecto(){
         m_view->setNuevoProyecto(); // El cerebro hace el trabajo limpio
     }
 }
-void MoleculaVista::abrirProyecto()   {}
-void MoleculaVista::guardarProyecto() {}
+
+void MoleculaVista::abrirProyecto(){
+    QString ruta = dialogoAbrirArchivo();
+
+    if (!ruta.isEmpty() && m_view) {
+        // Almacenamos el resultado de la carga
+        bool cargaExitosa = m_view->loadFile(ruta);
+
+        // Si el cerebro reporta un fallo de lectura o formato, avisamos formalmente
+        if(!cargaExitosa) {
+            QMessageBox::critical(
+                this,
+                tr("Error al abrir archivo"),
+                tr("No se pudo leer el archivo seleccionado.\nEl fichero puede estar corrupto o no tener un formato MOPAC/VisMol valido."),
+                QMessageBox::Ok
+                );
+        }
+    }
+}
+
+void MoleculaVista::guardarProyecto(){
+    // 1. Obtenemos la ruta usando tu nueva función
+    QString ruta = dialogoGuardarArchivo();
+
+    // 2. Si es válida, disparamos la orden hacia el cerebro
+    if (!ruta.isEmpty() && m_view) {
+        m_view->saveFile(ruta); // Tu nueva nomenclatura en m_view
+    }
+}
+
 void MoleculaVista::cerrarProyecto(){
     if (sePuedeCerrar()){
         m_view->cerrarProyecto(); // El cerebro hace el trabajo limpio
     }
 }
+
 void MoleculaVista::salir()           { this->close(); }
+
 void MoleculaVista::importarXYZ()     {}
+
 void MoleculaVista::exportarMOPAC()   {}
+
 void MoleculaVista::deshacer()        {}
+
 void MoleculaVista::rehacer()         {}
+
 void MoleculaVista::limpiarLienzo()   {m_view->limpiarLienzo();}
+
 void MoleculaVista::configurarMopac() {}
+
 void MoleculaVista::mostrarFrecuencias(){}
+
 void MoleculaVista::verLogOut()        {}
 
 // =========================================================================
@@ -493,7 +561,7 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
     // =========================================================================
     // REGLA 4: CONTROL POR PERSISTENCIA (estaGuardado)
     // =========================================================================
-    m_accionesArchivo.guardar->setEnabled(!modoLienzo.estaGuardado && !modoLienzo.estaVacio);
+    m_accionesArchivo.guardar->setEnabled(!modoLienzo.estaVacio);
 
     // =========================================================================
     // REGLA 5: TÍTULO DINÁMICO DE LA VENTANA
@@ -668,59 +736,37 @@ void MoleculaVista::setTemaApp(){
         "font-weight: bold; "
         "}"
 
-        // Ajuste barra de elementos (Adiós a los 120px forzados incómodos)
+        // =========================================================================
+        // BARRA LATERAL IZQUIERDA: HOMOGÉNEA Y SIMÉTRICA CON LA SUPERIOR
+        // =========================================================================
         "QToolBar#barraElementos { "
-        "   background-color: #1e1e1e; "
+        "   background-color: #222222; "        /* Mismo color exacto que la superior */
         "   border-right: 1px solid #2d2d2d; "
-        "   spacing: 4px; "                     /* Espaciado vertical mínimo y elegante */
-        "   padding: 8px 4px; "
+        "   border-top: none; "
+        "   border-left: none; "
+        "   border-bottom: none; "
+        "   spacing: 6px; "
+        "   padding: 6px; "                    /* Padding cuadrado limpio */
         "}"
 
+        /* Hereda todo el comportamiento general. Solo aseguramos que se comporte como IconOnly */
         "QToolBar#barraElementos QToolButton { "
-        "   min-width: 82px; "                  /* ¡REDUCIDO! Ancho optimizado al tamaño de la palabra */
-        "   max-width: 82px; "
-        "   min-height: 54px; "                 /* Altura compacta para la pila vertical */
-        "   max-height: 54px; "
-        "   text-align: center; "               /* Centrado absoluto */
-        "   padding: 4px 2px; "
-        "   font-size: 11px; "                  /* Tipografía sutil típica de paneles de herramientas */
-        "   border: 1px solid transparent; "    /* Sin borde por defecto para limpiar la vista */
-        "   border-radius: 4px; "
-        "   background-color: transparent; "     /* Fondo plano; se integra con la barra */
-        "   color: #aaaaaa; "                   /* Color atenuado profesional */
-        "   icon-size: 20px 20px; "             /* Proporción ideal respecto al texto */
+        "   qproperty-toolButtonStyle: ToolButtonIconOnly; "
+        "   icon-size: 20px 20px; "            /* Mismo tamaño que arriba */
         "}"
 
-        /* Configuramos la propiedad nativa de Qt desde la hoja de estilos */
-        "QToolBar#barraElementos QToolButton { "
-        "   qproperty-toolButtonStyle: ToolButtonTextUnderIcon; "
-        "}"
-
-        /* Efecto Hover: Aparición suave al pasar el ratón */
         "QToolBar#barraElementos QToolButton:hover { "
-        "   background-color: #2d2d30; "
+        "   background-color: #383838; "
+        "   border: 1px solid #4a4a4a; "
         "   color: #ffffff; "
-        "   border: 1px solid #3f3f46; "
         "}"
 
-        /* Efecto Hundido / Activo: Resaltado de herramienta seleccionada */
         "QToolBar#barraElementos QToolButton:checked { "
-        "   background-color: #1c3d6e; "         /* Azul marino atenuado */
-        "   border: 1px solid #0f52ba; "         /* Borde zafiro */
+        "   background-color: #0f52ba; "
+        "   border: 1px solid #3b82f6; "
         "   color: #ffffff; "
         "   font-weight: bold; "
-        "   border-left: 3px solid #0f52ba; "   /* Detalle premium en el flanco izquierdo */
         "}"
-        /* Estilo específico para el botón de la Tabla Periódica (cambia el color del texto a azul para invitar al clic) */
-        "QToolBar#barraElementos QToolButton[text=\"Más...\"] { "
-        "   color: #3b82f6; "
-        "   font-weight: bold; "
-        "}"
-        "QToolBar#barraElementos QToolButton[text=\"Más...\"]:hover { "
-        "   background-color: #1c3d6e; "
-        "   color: #ffffff; "
-        "}"
-
 
         // Lienzo Central
         "QGraphicsView#visorMolecular { "

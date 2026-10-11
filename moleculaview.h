@@ -52,6 +52,8 @@ public:
     void setModoEditor(const ModoEditor& nuevoModo);
     void setElementoActivo(const QString& simbolo);
     void setNuevoProyecto();
+    bool loadFile(const QString& ruta);
+    void saveFile(const QString& ruta);
 
     //#########################################################################
     // ZONA: FUNCIONES PÚBLICAS (INTERACCIÓN CON EL ESCENARIO / RATÓN)
