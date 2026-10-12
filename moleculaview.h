@@ -49,11 +49,11 @@ public:
     // ZONA: FUNCIONES PÚBLICAS (CONTROL DE ESTADOS Y HERRAMIENTAS)
     //#########################################################################
 public:
-    void setModoEditor(const ModoEditor& nuevoModo);
-    void setElementoActivo(const QString& simbolo);
-    void setNuevoProyecto();
-    bool loadFile(const QString& ruta);
-    void saveFile(const QString& ruta);
+    void        setModoEditor(const ModoEditor& nuevoModo);
+    void        setElementoActivo(const QString& simbolo);
+    void        setNuevoProyecto();
+    QString     loadFileVisMol(const QString& ruta);
+    QString     saveFileVisMol(const QString& ruta);
 
     //#########################################################################
     // ZONA: FUNCIONES PÚBLICAS (INTERACCIÓN CON EL ESCENARIO / RATÓN)

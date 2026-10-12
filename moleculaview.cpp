@@ -1,5 +1,6 @@
 #include "moleculaview.h"
 #include "atomos.h"
+#include "datosio.h"
 
 #include <QObject>
 #include <QFile>
@@ -71,172 +72,18 @@ void MoleculaView::setNuevoProyecto(){
     setModoLienzo(modo);
 }
 
-bool MoleculaView::loadFile(const QString& ruta){
+QString MoleculaView::loadFileVisMol(const QString& ruta){
     // Control de seguridad inicial para evitar rutas vacías
-    if (ruta.isEmpty()) return false;
+    if (ruta.isEmpty()) return "Debes especificar unja archivo para guardar los datos.";
 
-    QFile archivo(ruta);
-    // Abrimos el archivo en modo lectura y forzamos el tratamiento de texto plano
-    if (!archivo.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return false;
-    }
-
-    // =========================================================================
-    // FASE 1: LIMPIEZA ABSOLUTA DE LA MEMORIA ACTUAL
-    // =========================================================================
-    m_idAtomoSeleccionado = -1;
-    m_listaAtomos.clear();
-    m_listaEnlaces.clear();
-    m_contadorIds = 0;
-
-    QTextStream entrada(&archivo);
-
-    // =========================================================================
-    // FASE 2: IGNORAR LAS 3 LÍNEAS DE CABECERA DE MOPAC (COMENTARIOS)
-    // =========================================================================
-    for (int i = 0; i < 3; ++i) {
-        if (!entrada.atEnd()) {
-            entrada.readLine(); // Desestima la línea leída
-        }
-    }
-
-    // =========================================================================
-    // FASE 3: LECTURA SECUENCIAL LÍNEA A LÍNEA Y PARSEO POR BLOQUES
-    // =========================================================================
-    int temporalIds = 0;
-    bool procesandoEnlaces = false; // Flag conmutador de sección
-    bool seHaLeidoAlgoValido = false; // Control de integridad del formato
-
-    while (!entrada.atEnd()) {
-        QString linea = entrada.readLine().trimmed();
-        if (linea.isEmpty()) continue; // Salta líneas vacías e intermedias
-
-        // Si topamos con la etiqueta de control, conmutamos al bloque de conectividad
-        if (linea == "[ENLACES]") {
-            procesandoEnlaces = true;
-            continue;
-        }
-
-        // Divide la línea ignorando acumulaciones de espacios o tabuladores múltiples
-        QStringList tokens = linea.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
-
-        // ------------------------------------------------=====================
-        // BLOQUE A: Parseo de Átomos (Formato MOPAC: Símbolo X 1 Y 1 Z 1)
-        // ------------------------------------------------=====================
-        if (!procesandoEnlaces && tokens.size() >= 7) {
-            Atomo atomo;
-
-            atomo.id      = temporalIds;
-            atomo.simbolo = tokens[0].trimmed();
-
-            // Las posiciones cartesianas en MOPAC se guardan en las columnas estables 1, 3 y 5
-            float x = tokens[1].toFloat();
-            float y = tokens[3].toFloat();
-            float z = tokens[5].toFloat();
-
-            atomo.posicion = QVector3D(x, y, z);
-
-            m_listaAtomos.append(atomo);
-            temporalIds++;
-            seHaLeidoAlgoValido = true;
-        }
-        // ------------------------------------------------=====================
-        // BLOQUE B: Parseo de Enlaces explícitos (Formato: ID1 ID2 Orden)
-        // ------------------------------------------------=====================
-        else if (procesandoEnlaces && tokens.size() >= 3) {
-            Enlace enlace;
-
-            enlace.id_atomo1 = tokens[0].toInt();
-            enlace.id_atomo2 = tokens[1].toInt();
-            enlace.orden     = tokens[2].toInt();
-
-            m_listaEnlaces.append(enlace);
-            seHaLeidoAlgoValido = true;
-        }
-    }
-    archivo.close();
-
-    // Sincronizamos nuestro contador interno global con los átomos reales inyectados
-    m_contadorIds = temporalIds;
-
-    // Si el archivo se leyó pero no contenía ninguna estructura válida, reportamos fallo
-    if (!seHaLeidoAlgoValido) {
-        return false;
-    }
-
-    // =========================================================================
-    // FASE 4: REGENERACIÓN DE LA SALUD DEL DOCUMENTO Y REPINTADO DE LA UI
-    // =========================================================================
-    ModoLienzo nuevoModo;
-    nuevoModo.estaIniciado = true;
-    nuevoModo.estaVacio    = m_listaAtomos.isEmpty();
-    nuevoModo.estaGuardado = true; // Al abrir un archivo intacto, nace en estado guardado
-
-    // Dispara las señales automáticas hacia la UI y el lienzo para renderizar todo
-    setModoLienzo(nuevoModo);
-
-    return true; // Éxito absoluto en la carga
+    return DatosIO::loadVisMol(ruta, m_listaAtomos, m_listaEnlaces); // Éxito absoluto en la carga
 }
 
-void MoleculaView::saveFile(const QString& ruta){
+QString MoleculaView::saveFileVisMol(const QString& ruta){
     // Control de seguridad inicial para evitar rutas vacías
-    if (ruta.isEmpty()) return;
+    if (ruta.isEmpty()) return "Debes especificar unja archivo para guardar los datos.";
 
-    QFile archivo(ruta);
-    // Abrimos en modo solo escritura y forzamos el tratamiento de texto plano limpio
-    if (!archivo.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        return;
-    }
-
-    QTextStream salida(&archivo);
-
-    // =========================================================================
-    // FASE 1: CABECERA ESTRICTA MOPAC (Las 3 líneas iniciales obligatorias)
-    // =========================================================================
-    // Línea 1: Tu firma personalizada exigida por los requisitos del sistema
-    salida << "#VisMol V2.0 NATIVE MOLECULAR FILE\n";
-
-    // Línea 2: Título del proyecto o comentario libre exigido por MOPAC
-    salida << "Molecula generada con VisorMol_V20\n";
-
-    // Línea 3: Línea de comentarios adicional obligatoria
-    salida << "Coordenadas Cartesianas con flags de optimizacion activos (1)\n";
-
-    // =========================================================================
-    // FASE 2: BLOQUE DE ÁTOMOS EN FORMATO CARTECIANO COMPATIBLE MOPAC
-    // =========================================================================
-    // Configuramos el formateo de números reales a formato decimal fijo con 4 decimales
-    salida.setRealNumberNotation(QTextStream::FixedNotation);
-    salida.setRealNumberPrecision(4);
-
-    for (const Atomo& atomo : m_listaAtomos) {
-        // Los tabuladores '\t' garantizan que las columnas queden perfectamente alineadas en disco
-        salida << atomo.simbolo << "\t"
-               << atomo.posicion.x() << "\t1\t"
-               << atomo.posicion.y() << "\t1\t"
-               << atomo.posicion.z() << "\t1\n";
-    }
-
-    // =========================================================================
-    // FASE 3: SECCIÓN DE ENLACES EXPLÍCITOS DE DISEÑO
-    // =========================================================================
-    salida << "[ENLACES]\n";
-    for (const Enlace& enlace : m_listaEnlaces) {
-        salida << enlace.id_atomo1 << "\t"
-               << enlace.id_atomo2 << "\t"
-               << enlace.orden << "\n";
-    }
-
-    // Cerramos el canal del sistema operativo de forma limpia
-    archivo.close();
-
-    // =========================================================================
-    // FASE 4: ACTUALIZACIÓN CENTRALIZADA DE LA PERSISTENCIA
-    // =========================================================================
-    m_modoLienzo.estaGuardado = true;
-
-    // Notificamos a la UI para quitar asteriscos del título y bloquear el botón guardar
-    setModoLienzo(m_modoLienzo);
+    return DatosIO::saveVisMol(ruta, m_listaAtomos, m_listaEnlaces);
 }
 
 //#########################################################################

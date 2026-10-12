@@ -475,16 +475,16 @@ void MoleculaVista::abrirProyecto(){
 
     if (!ruta.isEmpty() && m_view) {
         // Almacenamos el resultado de la carga
-        bool cargaExitosa = m_view->loadFile(ruta);
+        QString error = m_view->loadFileVisMol(ruta);
 
         // Si el cerebro reporta un fallo de lectura o formato, avisamos formalmente
-        if(!cargaExitosa) {
+        if(error != "") {
             QMessageBox::critical(
                 this,
-                tr("Error al abrir archivo"),
-                tr("No se pudo leer el archivo seleccionado.\nEl fichero puede estar corrupto o no tener un formato MOPAC/VisMol valido."),
+               tr("Error al abrir archivo"),
+                QString("Se produjo un error:  %1 \n No se han podido guardar los datos.").arg(error),
                 QMessageBox::Ok
-                );
+            );
         }
     }
 }
@@ -495,7 +495,17 @@ void MoleculaVista::guardarProyecto(){
 
     // 2. Si es válida, disparamos la orden hacia el cerebro
     if (!ruta.isEmpty() && m_view) {
-        m_view->saveFile(ruta); // Tu nueva nomenclatura en m_view
+        QString error = m_view->saveFileVisMol(ruta); // Tu nueva nomenclatura en m_view
+
+        // Si el cerebro reporta un fallo de lectura o formato, avisamos formalmente
+        if(error != "") {
+            QMessageBox::critical(
+                this,
+                tr("Error al abrir archivo"),
+                QString("Se produjo un error:  %1 \n No se han podido cargar los datos.").arg(error),
+                QMessageBox::Ok
+            );
+        }
     }
 }
 
