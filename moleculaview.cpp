@@ -15,12 +15,13 @@
 MoleculaView::MoleculaView(QObject *parent)
     : QObject(parent){
 
-    // Estado Inicial, al nacer
-    m_modoActual                = ModoSeleccion;
+    // Iniciar todo de fábrica usando el nuevo método centralizado
+    resetVariablesClase();
+
+    // Establecemos el estado de salud inicial del lienzo
     m_modoLienzo.estaVacio      = true;
     m_modoLienzo.estaGuardado   = false;
     m_modoLienzo.estaIniciado   = false;
-    m_atomoActivo               = "C";
 }
 
 MoleculaView::~MoleculaView(){
@@ -59,6 +60,10 @@ void MoleculaView::setElementoActivo(const QString& simbolo){
     setMensajeEstado();
 }
 
+void MoleculaView::setComentario(const QString& comentario){
+    m_comentario = comentario.trimmed();
+}
+
 void MoleculaView::setNuevoProyecto(){
     limpiarLienzo();
 
@@ -68,23 +73,103 @@ void MoleculaView::setNuevoProyecto(){
     modo.estaIniciado   = true;
     modo.estaVacio      = true;
 
+    // Limpieza profunda del historial al cerrar, limpiar o cambiar de lienzo
+    m_atras.clear();
+    m_adelante.clear();
+
     setModoEditor(ModoSeleccion);
     setModoLienzo(modo);
 }
 
 QString MoleculaView::loadFileVisMol(const QString& ruta){
-    // Control de seguridad inicial para evitar rutas vacías
-    if (ruta.isEmpty()) return "Debes especificar unja archivo para guardar los datos.";
+    if (ruta.isEmpty()) return "Debes especificar un archivo para cargar los datos.";
 
-    return DatosIO::loadVisMol(ruta, m_listaAtomos, m_listaEnlaces); // Éxito absoluto en la carga
+    // 1. CREAMOS CONTENEDORES TEMPORALES (Si la carga falla, la molécula actual se salva)
+    QVector<Atomo>  listaAtomosTemporal;
+    QVector<Enlace> listaEnlacesTemporal;
+    QString         comentarioTemporal;
+
+    // 2. Invocamos al parseador pasándole las referencias temporales
+    QString error = DatosIO::loadVisMol(ruta, listaAtomosTemporal, listaEnlacesTemporal, comentarioTemporal);
+
+    // 3. EN CASO DE ERROR, ABORTAMOS INMEDIATAMENTE (Sin tocar la memoria de la clase)
+    if (!error.isEmpty()) {
+        return error;
+    }
+
+    // 4. SI LA CARGA FUE UN ÉXITO ABSOLUTO, RESPALDAMOS Y ACTUALIZAMOS LA APLICACIÓN
+    resetVariablesClase(); // Ahora sí, limpiamos con total seguridad
+
+    // Volcamos las estructuras temporales a las variables oficiales de la clase
+    m_listaAtomos  = listaAtomosTemporal;
+    m_listaEnlaces = listaEnlacesTemporal;
+    m_comentario   = comentarioTemporal;
+
+    // Sincronizar el contador interno de IDs buscando el valor más alto cargado
+    int maxId = -1;
+    for (const Atomo& atomo : m_listaAtomos) {
+        if (atomo.id > maxId) {
+            maxId = atomo.id;
+        }
+    }
+    m_contadorIds = maxId;
+
+    // Limpieza profunda del historial al cerrar, limpiar o cambiar de lienzo
+    m_atras.clear();
+    m_adelante.clear();
+
+    // Forzamos el refresco completo de la salud del documento y los widgets de interfaz
+    ModoLienzo modo;
+    modo.estaVacio     = m_listaAtomos.isEmpty();
+    modo.estaGuardado  = true; // Sincronizado con el disco recién abierto
+    modo.estaIniciado  = true; // Enciende las barras de herramientas
+
+    setModoLienzo(modo);
+
+    return ""; // Éxito total
 }
 
 QString MoleculaView::saveFileVisMol(const QString& ruta){
     // Control de seguridad inicial para evitar rutas vacías
     if (ruta.isEmpty()) return "Debes especificar unja archivo para guardar los datos.";
 
-    return DatosIO::saveVisMol(ruta, m_listaAtomos, m_listaEnlaces);
+    return DatosIO::saveVisMol(ruta, m_listaAtomos, m_listaEnlaces, m_comentario);
 }
+
+// =========================================================================
+// ZONA PÚBLICA: DISPARADORES MAESTROS DE TIEMPO (GATILLOS)
+// =========================================================================
+
+void MoleculaView::deshacer() {
+    if (m_atras.isEmpty()) return; // Red de seguridad
+
+    // 1. Guardamos el presente en el futuro por si el usuario se arrepiente
+    pushAdelante();
+
+    // 2. Extraemos el pasado físico y pisamos la memoria actual
+    popAtras();
+
+    // 3. Tu código original: simple, directo y totalmente correcto
+    setModoLienzo(m_modoLienzo);
+}
+
+void MoleculaView::rehacer() {
+    if (m_adelante.isEmpty()) return; // Red de seguridad
+
+    // 1. Guardamos el presente en el pasado de forma directa (sin limpiar m_adelante)
+    FotoActual fotoPresente;
+    fotoPresente.listaAtomos  = m_listaAtomos;
+    fotoPresente.listaEnlaces = m_listaEnlaces;
+    fotoPresente.contadorIds  = m_contadorIds;
+    m_atras.append(fotoPresente);
+
+    // 2. Extraemos el futuro físico y pisamos la memoria actual
+    popAdelante();
+
+    // 3. Tu código original: simple, directo y totalmente correcto
+    setModoLienzo(m_modoLienzo);
+}
+
 
 //#########################################################################
 // ZONA: FUNCIONES PÚBLICAS (INTERACCIÓN CON EL ESCENARIO / RATÓN)
@@ -167,6 +252,10 @@ void MoleculaView::setClickDerecho(const QVector3D& posClickDerecho){
 //#########################################################################
 
 void MoleculaView::delAtomo(const int& idAtomo){
+
+    // Guarda la memoria
+    pushAtras();
+
     // 1.- INTEGRIDAD QUÍMICA CRÍTICA: Eliminamos los enlaces recorriendo el vector al revés
     for (int i = m_listaEnlaces.size() - 1; i >= 0; --i) {
         if (m_listaEnlaces[i].id_atomo1 == idAtomo || m_listaEnlaces[i].id_atomo2 == idAtomo) {
@@ -193,6 +282,9 @@ void MoleculaView::delAtomo(const int& idAtomo){
 
 void MoleculaView::delEnlace(const int& idEnlace){
 
+    // Guarda la memoria
+    pushAtras();
+
     // Buscamos el enlace por las identificaciones de sus átomos (o si tuviera un id único)
     // En tu estructura actual, si pasamos el índice directo del vector de enlaces:
     if (idEnlace >= 0 && idEnlace < m_listaEnlaces.size()) {
@@ -207,39 +299,35 @@ void MoleculaView::delEnlace(const int& idEnlace){
 }
 
 void MoleculaView::limpiarLienzo(){
-    // Alteración de memoria en silencio
-    m_listaAtomos.clear();
-    m_listaEnlaces.clear();
-    m_contadorIds   = 0;
 
-    m_atomoActivo   = "C";
-    m_modoActual    = ModoSeleccion;
+    // Guarda la memoria
+    pushAtras();
 
-    // Reseteo absoluto de la salud del documento
+    // Reseteo absoluto de la memoria en silencio
+    resetVariablesClase();
+
+    // Configuración específica de la salud del documento para el lienzo limpio
     ModoLienzo modo;
-
     modo.estaVacio      = true;
     modo.estaGuardado   = false;
-    modo.estaIniciado   = true; // Borra todo pero no cierra el proyecto
+    modo.estaIniciado   = true; // El lienzo sigue activo y listo para dibujar
 
     setModoLienzo(modo);
 }
 
 void MoleculaView::cerrarProyecto(){
-    // Alteración de memoria en silencio
-    m_listaAtomos.clear();
-    m_listaEnlaces.clear();
-    m_contadorIds   = 0;
+    // Reseteo absoluto de la memoria en silencio
+    resetVariablesClase();
 
-    m_atomoActivo   = "C";
-    m_modoActual    = ModoSeleccion;
+    // Limpieza profunda del historial al cerrar, limpiar o cambiar de lienzo
+    m_atras.clear();
+    m_adelante.clear();
 
-    // Reseteo absoluto de la salud del documento
+    // Configuración específica para el cierre completo de la sesión
     ModoLienzo modo;
-
     modo.estaVacio      = true;
     modo.estaGuardado   = false;
-    modo.estaIniciado   = false; // Cierra totalmente el proyecto
+    modo.estaIniciado   = false; // Apaga la barra de herramientas lateral
 
     setModoLienzo(modo);
 }
@@ -270,6 +358,18 @@ int MoleculaView::getIdAtomoSeleccionado(){
     return m_idAtomoSeleccionado;
 }
 
+QString MoleculaView::getComentario(){
+    return m_comentario;
+}
+
+bool MoleculaView::hayPasado() const {
+    return !m_atras.isEmpty();
+}
+
+bool MoleculaView::hayFuturo() const {
+    return !m_adelante.isEmpty();
+}
+
 //#########################################################################
 // ZONA: INTERNA / PRIVADA (LÓGICA DE NEGOCIO CEREBRAL)
 //#########################################################################
@@ -280,9 +380,13 @@ void MoleculaView::setElementoSeleccionado(int idAtomoSeleccionado){
 
 void MoleculaView::procesarClickDibujoAtomo(const QVector3D& posClick) {
     if(getIdAtomoFromPos(posClick) < 0){
+
+        // Guarda la memoria
+        pushAtras();
+
         Atomo nuevoAtomo;
 
-        nuevoAtomo.id       = m_contadorIds++;
+        nuevoAtomo.id       = ++m_contadorIds;
         nuevoAtomo.simbolo  = m_atomoActivo;
         nuevoAtomo.posicion = posClick;
 
@@ -301,6 +405,10 @@ void MoleculaView::procesarClickSeleccion(const QVector3D& posClick) {
 void MoleculaView::procesarClickCrearEnlace(const QVector3D& posClick) {
     int idAtomoActual = getIdAtomoFromPos(posClick);
     if(idAtomoActual < 0) return;
+
+    // Guarda la memoria
+    pushAtras();
+
 
     // =========================================================================
     // FASE 1: SELECCIÓN DEL PRIMER ÁTOMO (ÁTOMO 1)
@@ -369,6 +477,7 @@ void MoleculaView::procesarClickCrearEnlace(const QVector3D& posClick) {
 
     // Si el enlace no existía entre ellos, intentamos crear un enlace simple nuevo (orden 1)
     if(isEnlacePosible(atomo1, atomo2)){
+
         Enlace nuevoEnlace;
         nuevoEnlace.id_atomo1 = idAtomo1;
         nuevoEnlace.id_atomo2 = idAtomo2;
@@ -382,6 +491,75 @@ void MoleculaView::procesarClickCrearEnlace(const QVector3D& posClick) {
 void MoleculaView::procesarClickRotacion(const QVector3D& posClick) {
 }
 
+void MoleculaView::resetVariablesClase(){
+    // 1. Vaciar contenedores físicos de memoria
+    m_listaAtomos.clear();
+    m_listaEnlaces.clear();
+    m_comentario = "";
+
+    // 2. Valores numéricos y de control de fábrica
+    m_contadorIds         = -1;
+    m_idAtomoSeleccionado = -1;
+
+    // 3. Herramientas y estados por defecto al iniciar
+    m_atomoActivo         = "C";
+    m_modoActual          = ModoSeleccion;
+
+}
+
+// =========================================================================
+// ZONA PRIVADA: GESTIÓN INTERNA DE PILAS (ATRAS / ADELANTE)
+// =========================================================================
+
+void MoleculaView::pushAtras() {
+    FotoActual foto;
+
+    // Forzamos la asignación explícita para duplicar los datos en un bloque de RAM nuevo
+    foto.listaAtomos  = QVector<Atomo>(m_listaAtomos);
+    foto.listaEnlaces = QVector<Enlace>(m_listaEnlaces);
+    foto.contadorIds  = m_contadorIds;
+
+    m_atras.append(foto);
+    m_adelante.clear();
+}
+
+void MoleculaView::pushAdelante() {
+    FotoActual foto;
+
+    // Forzamos el aislamiento exacto en el futuro
+    foto.listaAtomos  = QVector<Atomo>(m_listaAtomos);
+    foto.listaEnlaces = QVector<Enlace>(m_listaEnlaces);
+    foto.contadorIds  = m_contadorIds;
+
+    m_adelante.append(foto);
+}
+
+void MoleculaView::popAtras() {
+    if (m_atras.isEmpty()) return;
+
+    // Extraemos el último plato de la pila del pasado
+    FotoActual estadoAnterior = m_atras.last();
+    m_atras.removeLast();
+
+    // Sobrescribimos las variables de la clase con el pasado recuperado
+    m_listaAtomos  = estadoAnterior.listaAtomos;
+    m_listaEnlaces = estadoAnterior.listaEnlaces;
+    m_contadorIds  = estadoAnterior.contadorIds;
+}
+
+void MoleculaView::popAdelante() {
+    if (m_adelante.isEmpty()) return;
+
+    // Extraemos el último plato de la pila del futuro
+    FotoActual estadoFuturo = m_adelante.last();
+    m_adelante.removeLast();
+
+    // Sobrescribimos las variables de la clase con el futuro recuperado
+    m_listaAtomos  = estadoFuturo.listaAtomos;
+    m_listaEnlaces = estadoFuturo.listaEnlaces;
+    m_contadorIds  = estadoFuturo.contadorIds;
+}
+
 // =========================================================================
 // ZONA: GESTOR CENTRALIZADO DE LA SALUD DEL DOCUMENTO
 // =========================================================================
@@ -390,8 +568,24 @@ void MoleculaView::setModoLienzo(const ModoLienzo& modoLienzo){
     // 1. Calculamos la realidad objetiva de los almacenes de memoria
     bool vacioAhora = m_listaAtomos.isEmpty() && m_listaEnlaces.isEmpty();
 
-    // 2. Si el lienzo se vacía por completo, la persistencia se apaga de forma obligatoria
-    bool guardadoReal = vacioAhora ? false : modoLienzo.estaGuardado;
+    // =========================================================================
+    // LÓGICA DE PERSISTENCIA DETECTORA DE CAMBIOS
+    // =========================================================================
+    /* Si el lienzo se vacía, el guardado se apaga.
+       Si el lienzo NO está vacío, evaluamos de forma transaccional:
+       ¿Se ha llamado a este método desde una carga/guardado exitoso?
+       Si la respuesta es NO (es decir, viene de un clic de dibujo o eliminación),
+       forzamos 'estaGuardado = false' para activar el asterisco en la interfaz. */
+    bool guardadoReal = modoLienzo.estaGuardado;
+
+    // Si el emisor de la llamada fue una alteración manual en pantalla (dibujar/borrar)
+    if (m_modoLienzo.estaIniciado && !vacioAhora && modoLienzo.estaGuardado == m_modoLienzo.estaGuardado) {
+        guardadoReal = false; // ¡Se ha modificado el lienzo! Flag de guardado apagado
+    }
+
+    if (vacioAhora) {
+        guardadoReal = false;
+    }
 
     // 3. Asignamos los tres estados en un único rincón controlado
     m_modoLienzo.estaIniciado = modoLienzo.estaIniciado;

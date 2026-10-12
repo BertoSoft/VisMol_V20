@@ -51,9 +51,12 @@ public:
 public:
     void        setModoEditor(const ModoEditor& nuevoModo);
     void        setElementoActivo(const QString& simbolo);
+    void        setComentario(const QString& comentario);
     void        setNuevoProyecto();
     QString     loadFileVisMol(const QString& ruta);
     QString     saveFileVisMol(const QString& ruta);
+    void        deshacer();
+    void        rehacer();
 
     //#########################################################################
     // ZONA: FUNCIONES PÚBLICAS (INTERACCIÓN CON EL ESCENARIO / RATÓN)
@@ -75,12 +78,16 @@ public:
     // ZONA: GETTERS DE ACCESO A DATOS (SOLO LECTURA)
     // =========================================================================
 public:
-    ModoEditor getModoEditor();
-    QString getSimboloAtomoActivo();
-    QVector<Atomo> getListaAtomos();
+    ModoEditor      getModoEditor();
+    QString         getSimboloAtomoActivo();
+    QVector<Atomo>  getListaAtomos();
     QVector<Enlace> getListaEnlaces();
-    int getIdAtomoSeleccionado();
-    ModoLienzo getModoLienzo();
+    int             getIdAtomoSeleccionado();
+    ModoLienzo      getModoLienzo();
+    QString         getComentario();
+    bool            hayPasado() const;
+    bool            hayFuturo() const;
+
 
     //#########################################################################
     // ZONA: INTERNA / PRIVADA (LÓGICA DE NEGOCIO CEREBRAL)
@@ -91,6 +98,11 @@ private:
     void procesarClickSeleccion(const QVector3D& posClick);
     void procesarClickCrearEnlace(const QVector3D& posClick);
     void procesarClickRotacion(const QVector3D& posClick);
+    void resetVariablesClase();
+    void pushAtras();
+    void popAtras();
+    void pushAdelante();
+    void popAdelante();
 
     // =========================================================================
     // ZONA: GESTOR CENTRALIZADO DE LA SALUD DEL DOCUMENTO
@@ -122,15 +134,26 @@ signals:
     // ZONA: ALMACÉN FÍSICO DE VARIABLES PRIVADAS (ESTADOS Y MEMORIA)
     // =========================================================================
 private:
-    ModoEditor     m_modoActual;
-    ModoLienzo     m_modoLienzo;
-    QString        m_atomoActivo;
 
-    QVector<Atomo>  m_listaAtomos;
-    QVector<Enlace> m_listaEnlaces;
+    struct FotoActual{
+        QVector<Atomo>      listaAtomos;
+        QVector<Enlace>     listaEnlaces;
+        int                 contadorIds;
+    };
 
-    int            m_contadorIds         = 0;
-    int            m_idAtomoSeleccionado = -1;
+    QVector<FotoActual>     m_atras;
+    QVector<FotoActual>     m_adelante;
+
+    ModoEditor              m_modoActual;
+    ModoLienzo              m_modoLienzo;
+    QString                 m_atomoActivo;
+
+    QVector<Atomo>          m_listaAtomos;
+    QVector<Enlace>         m_listaEnlaces;
+    QString                 m_comentario;
+
+    int                     m_contadorIds         = 0;
+    int                     m_idAtomoSeleccionado = -1;
 };
 
 #endif // MOLECULAVIEW_H

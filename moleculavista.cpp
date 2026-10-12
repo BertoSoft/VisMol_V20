@@ -11,6 +11,8 @@
 #include <QMessageBox>
 #include <QCursor>
 #include <QFileDialog>
+#include <QLineEdit>
+#include <QInputDialog>
 
 // =========================================================================
 // ZONA: CICLO DE VIDA DE LA VENTANA
@@ -50,6 +52,13 @@ void MoleculaVista::setMoleculaView(MoleculaView* view){
 
     // Cabñle 4 conecta la señal de menuEliminar con el menu de boton derecho
     connect(m_view, &MoleculaView::setMenuEliminar, this, &MoleculaVista::setMenuBotonDerecho);
+
+    // Cable 5 conecta la señal etComentario::finaledicion con la funcion m_view->setComentario()
+    connect(m_etComentario, &QLineEdit::editingFinished, this, [this](){
+        if(m_view){
+            m_view->setComentario(m_etComentario->text());
+        }
+    });
 
     // Sincronización forzada inicial directa desde el Emisor real:
     m_view->setModoEditor(MoleculaView::ModoSeleccion);
@@ -153,6 +162,7 @@ void MoleculaVista::initUi(){
 
     initMenu();
     initToolBarSuperior();
+    initToolBarComentario();
     initToolBarIzda();
     initAnimacionBar();
     initDockPanels();
@@ -236,6 +246,35 @@ void MoleculaVista::initToolBarSuperior(){
     m_barraProyecto->addAction(m_accionesCalculo.configurarMopac);
 
 
+}
+
+void MoleculaVista::initToolBarComentario(){
+    // 1. Instanciamos la barra de herramientas horizontal exclusiva para el comentario
+    m_barraComentario = new QToolBar(tr("Descripción del Compuesto"), this);
+    m_barraComentario->setObjectName("barraComentario");
+
+    // Hace que la barra aparezca debajo de la de proyecto
+    this->addToolBarBreak(Qt::TopToolBarArea);
+
+    addToolBar(Qt::TopToolBarArea, m_barraComentario);
+    m_barraComentario->setMovable(false);
+    m_barraComentario->setFloatable(false);
+
+    // 2. Creamos la etiqueta de texto asignándole un objectName para su diseño en setTemaApp
+    QLabel* lblEtiqueta = new QLabel(tr(" Descripción del Compuesto: "), this);
+    lblEtiqueta->setObjectName("lblEtiquetaComentario");
+    m_barraComentario->addWidget(lblEtiqueta);
+
+    // 3. Instanciamos el cuadro de edición asignándole su objectName correspondiente
+    m_etComentario = new QLineEdit(this);
+    m_etComentario->setObjectName("etComentarioTexto");
+    m_etComentario->setPlaceholderText(tr("Escribe aquí el nombre de la molécula o notas del proyecto..."));
+    m_etComentario->setMaxLength(150);
+
+    m_barraComentario->addWidget(m_etComentario);
+
+    // 4. Estado inicial de fábrica: oculta hasta que el lienzo contenga datos
+    m_barraComentario->setVisible(false);
 }
 
 void MoleculaVista::initToolBarIzda(){
@@ -471,40 +510,50 @@ void MoleculaVista::nuevoProyecto(){
 }
 
 void MoleculaVista::abrirProyecto(){
+    if (!m_view) return;
+
+    // 1. Antes de abrir, verificamos si hay cambios sin guardar en el lienzo actual
+    if (!sePuedeCerrar()) {
+        return; // El usuario canceló la operación en el cuadro de diálogo
+    }
+
+    // 2. Desplegamos el explorador de archivos nativo
     QString ruta = dialogoAbrirArchivo();
 
-    if (!ruta.isEmpty() && m_view) {
-        // Almacenamos el resultado de la carga
+    if (!ruta.isEmpty()) {
+        // 3. Ordenamos al cerebro cargar el archivo en modo transaccional seguro
         QString error = m_view->loadFileVisMol(ruta);
 
-        // Si el cerebro reporta un fallo de lectura o formato, avisamos formalmente
-        if(error != "") {
-            QMessageBox::critical(
-                this,
-               tr("Error al abrir archivo"),
-                QString("Se produjo un error:  %1 \n No se han podido guardar los datos.").arg(error),
-                QMessageBox::Ok
-            );
-        }
-    }
-}
-
-void MoleculaVista::guardarProyecto(){
-    // 1. Obtenemos la ruta usando tu nueva función
-    QString ruta = dialogoGuardarArchivo();
-
-    // 2. Si es válida, disparamos la orden hacia el cerebro
-    if (!ruta.isEmpty() && m_view) {
-        QString error = m_view->saveFileVisMol(ruta); // Tu nueva nomenclatura en m_view
-
-        // Si el cerebro reporta un fallo de lectura o formato, avisamos formalmente
-        if(error != "") {
+        // 4. Si el cerebro reporta un fallo de lectura o formato, avisamos formalmente
+        if (!error.isEmpty()) {
             QMessageBox::critical(
                 this,
                 tr("Error al abrir archivo"),
-                QString("Se produjo un error:  %1 \n No se han podido cargar los datos.").arg(error),
+                QString("Se produjo un error al intentar leer el proyecto:\n%1").arg(error),
                 QMessageBox::Ok
-            );
+                );
+        }
+    }
+}
+void MoleculaVista::guardarProyecto(){
+    if (!m_view) return;
+
+    // 1. Obtenemos directamente la ruta física de destino usando el explorador de archivos nativo
+    QString ruta = dialogoGuardarArchivo();
+
+    // 2. Si la ruta es válida, disparamos la orden de escritura hacia el negocio de forma inmediata
+    if (!ruta.isEmpty()) {
+        // El cerebro ya tiene el comentario guardado de forma transparente gracias al cable de QLineEdit
+        QString error = m_view->saveFileVisMol(ruta);
+
+        // Si el motor físico de disco reporta un fallo, notificamos al usuario
+        if (!error.isEmpty()) {
+            QMessageBox::critical(
+                this,
+                tr("Error al guardar archivo"),
+                QString("Se produjo un error al intentar escribir el archivo:\n%1").arg(error),
+                QMessageBox::Ok
+                );
         }
     }
 }
@@ -521,9 +570,17 @@ void MoleculaVista::importarXYZ()     {}
 
 void MoleculaVista::exportarMOPAC()   {}
 
-void MoleculaVista::deshacer()        {}
+void MoleculaVista::deshacer(){
+    if (m_view) {
+        m_view->deshacer(); // El cerebro viaja al pasado y emite las señales de refresco
+    }
+}
 
-void MoleculaVista::rehacer()         {}
+void MoleculaVista::rehacer(){
+    if (m_view) {
+        m_view->rehacer(); // El cerebro avanza al futuro alternativo
+    }
+}
 
 void MoleculaVista::limpiarLienzo()   {m_view->limpiarLienzo();}
 
@@ -538,6 +595,7 @@ void MoleculaVista::verLogOut()        {}
 // =========================================================================
 
 void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLienzo){
+
     // =========================================================================
     // REGLA 1: GESTIÓN DE LA BARRA DE HERRAMIENTAS LATERAL (FÁBRICA)
     // =========================================================================
@@ -551,8 +609,16 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
     m_accionesEdicion.limpiarLienzo->setEnabled(!modoLienzo.estaVacio);
     m_accionesIO.exportarMOPAC->setEnabled(!modoLienzo.estaVacio);
     m_accionesCalculo.configurarMopac->setEnabled(!modoLienzo.estaVacio);
-    m_accionesEdicion.deshacer->setEnabled(!modoLienzo.estaVacio);
-    m_accionesEdicion.rehacer->setEnabled(!modoLienzo.estaVacio);
+
+    // ¡MODIFICADO!: Disponibilidad inteligente basada en el inventario real de las pilas
+    if (m_view) {
+        m_accionesEdicion.deshacer->setEnabled(m_view->hayPasado());
+        m_accionesEdicion.rehacer->setEnabled(m_view->hayFuturo());
+    } else {
+        m_accionesEdicion.deshacer->setEnabled(false);
+        m_accionesEdicion.rehacer->setEnabled(false);
+    }
+
     m_accionesElementos.modoEnlace->setEnabled(!modoLienzo.estaVacio);
     m_accionesElementos.modoRotar->setEnabled(!modoLienzo.estaVacio);
     m_accionesAnalisis.mostrarFreq->setEnabled(!modoLienzo.estaVacio);
@@ -566,6 +632,16 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
         m_panelFrecuencias->setVisible(false);
         m_panelConsola->setVisible(false);
         m_barraAnimacion->setVisible(false);
+        m_etComentario->clear();
+        m_barraComentario->setVisible(false);
+    }
+    else {
+        // ¡NUEVO!: Si no está vacío (al abrir o dibujar el primer átomo), la barra aparece
+        m_barraComentario->setVisible(true);
+
+        if (!m_etComentario->hasFocus()) {
+            m_etComentario->setText(m_view->getComentario());
+        }
     }
 
     // =========================================================================
@@ -854,7 +930,42 @@ void MoleculaVista::setTemaApp(){
         "font-family: 'Consolas', monospace; "
         "font-size: 12px; "
         "padding: 8px; "
+        "}"
+
+        /* =========================================================================
+           BARRA DE CONTEXTO / COMENTARIO DE COMPUESTO (DINÁMICA)
+           ========================================================================= */
+        "QToolBar#barraComentario { "
+        "   background-color: #222222; " /* Mismo fondo que la barra superior */
+        "   border-bottom: 1px solid #2d2d2d; "
+        "   border-top: none; "
+        "   border-left: none; "
+        "   border-right: none; "
+        "   padding: 4px 6px; "
+        "}"
+
+        "QLabel#lblEtiquetaComentario { "
+        "   color: #3b82f6; " /* Azul vibrante corporativo */
+        "   font-weight: bold; "
+        "   font-size: 13px; "
+        "   padding-right: 4px; "
+        "}"
+
+        "QLineEdit#etComentarioTexto { "
+        "   background-color: #141414; "
+        "   color: #e5e5e5; "
+        "   border: 1px solid #3a3a3a; "
+        "   border-radius: 4px; "
+        "   padding: 4px 8px; "
+        "   font-size: 13px; "
+        "}"
+
+        "QLineEdit#etComentarioTexto:focus { "
+        "   border: 1px solid #0f52ba; " /* Brillo azul zafiro al editar */
+        "   background-color: #181818; "
         "}";
+
+
 
     this->setStyleSheet(estilo);
 }

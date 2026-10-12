@@ -37,6 +37,7 @@ private:
     void initUi();
     void initMenu();
     void initToolBarSuperior();
+    void initToolBarComentario();
     void initToolBarIzda();
     void initAnimacionBar();
     void initDockPanels();
@@ -134,6 +135,8 @@ private:
 
     // Componentes gráficos del sistema de ventanas
     QToolBar*      m_barraProyecto        = nullptr;
+    QToolBar*      m_barraComentario      = nullptr;
+    QLineEdit*     m_etComentario         = nullptr;
     QToolBar*      m_barraElementos       = nullptr;
     QToolBar*      m_barraAnimacion       = nullptr;
     QActionGroup*  m_grupoElementos       = nullptr;
