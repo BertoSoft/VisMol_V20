@@ -1,4 +1,5 @@
 #include "moleculaview.h"
+#include "atomos.h"
 
 #include <QObject>
 #include <QFile>
@@ -470,7 +471,7 @@ void MoleculaView::procesarClickCrearEnlace(const QVector3D& posClick) {
 
         if(encontrado) {
             int enlacesActuales = getEnlaces(atomoPulsado);
-            int valenciaMaxima  = getValenciaMax(atomoPulsado);
+            int valenciaMaxima  = Atomos::getMaxValencia(atomoPulsado.simbolo);
 
             // CORREGIDO: Eliminamos "|| enlacesActuales == 3".
             // Ahora un Carbono con 3 enlaces (como el de tu carbonilo) SÍ se puede seleccionar
@@ -600,10 +601,8 @@ int MoleculaView::getIdAtomoFromPos(const QVector3D& posClick){
 
         // Recuperamos el mismo radio que usas en el lienzo para que la zona de click sea exacta
         float radioAtomo = 15.0f; // Valor por defecto
-        if (atomo.simbolo == "C") radioAtomo = 36.0f;
-        else if (atomo.simbolo == "H") radioAtomo = 24.0f;
-        else if (atomo.simbolo == "O") radioAtomo = 32.0f;
-        else if (atomo.simbolo == "N") radioAtomo = 34.0f;
+
+        radioAtomo = Atomos::getRadio(atomo.simbolo);
 
         // Si la distancia del click al centro es menor o igual al radio, está dentro del átomo
         if(distancia <= radioAtomo){
@@ -611,17 +610,6 @@ int MoleculaView::getIdAtomoFromPos(const QVector3D& posClick){
         }
     }
     return -1;
-}
-
-int MoleculaView::getValenciaMax(const Atomo& atomo){
-    if (atomo.simbolo == "H") return 1;  // Hidrógeno dueto
-    if (atomo.simbolo == "O") return 2;  // Oxígeno
-    if (atomo.simbolo == "N") return 3;  // Nitrógeno
-    if (atomo.simbolo == "C") return 4;  // Carbono
-    if (atomo.simbolo == "S") return 6;  // Azufre (hipervalente común)
-    if (atomo.simbolo == "P") return 5;  // Fósforo (hipervalente común)
-    if (atomo.simbolo == "F" || atomo.simbolo == "Cl") return 1; // Halógenos
-    return 0; // Desconocido / Bloqueado
 }
 
 bool MoleculaView::isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2){
@@ -633,8 +621,8 @@ bool MoleculaView::isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2){
     int enlacesActuales2 = getEnlaces(atomo2);
 
     // 3. Obtener sus valencias máximas (ej: C=4, N=3, O=2, H=1)
-    int max1 = getValenciaMax(atomo1);
-    int max2 = getValenciaMax(atomo2);
+    int max1 = Atomos::getMaxValencia(atomo1.simbolo);
+    int max2 = Atomos::getMaxValencia(atomo2.simbolo);
 
     // Regla A: Si cualquiera de los dos ya está al límite de su octeto/dueto, se bloquea
     if ((enlacesActuales1 + 1) > max1 || (enlacesActuales2 + 1) > max2) {
@@ -692,15 +680,6 @@ bool MoleculaView::isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2){
     }
 
     return true;
-}
-
-int MoleculaView::getElectronesValenciaNaturales(const Atomo& atomo){
-    if (atomo.simbolo == "H") return 1;
-    if (atomo.simbolo == "C") return 4;
-    if (atomo.simbolo == "N" || atomo.simbolo == "P") return 5;
-    if (atomo.simbolo == "O" || atomo.simbolo == "S") return 6;
-    if (atomo.simbolo == "F" || atomo.simbolo == "Cl") return 7;
-    return 0;
 }
 
 int MoleculaView::getEnlaces(const Atomo& atomo){

@@ -1,5 +1,6 @@
 #include "moleculalienzo.h"
 #include "moleculaview.h"
+#include "atomos.h"
 
 #include <QObject>
 #include <QMouseEvent>
@@ -137,8 +138,8 @@ void MoleculaLienzo::actualizarLienzo(){
     // ==========================================================================
 
     for(const Atomo &atomo: listaAtomos){
-        qreal   radio   = getRadioFromAtomo(atomo);
-        QColor  color   = getColorFromAtomo(atomo);
+        qreal   radio   = Atomos::getRadio(atomo.simbolo);
+        QColor  color   = Atomos::getColor(atomo.simbolo);
 
         qreal x         = atomo.posicion.x() - radio;
         qreal y         = atomo.posicion.y() - radio;
@@ -186,7 +187,7 @@ void MoleculaLienzo::actualizarLienzo(){
         texto->setFont(fuenteApp);
 
         // Control dinámico de legibilidad: texto negro para fondos muy claros (H, S, P, Halógenos), blanco para el resto
-        if (atomo.simbolo == "H" || atomo.simbolo == "S" || atomo.simbolo == "P" || atomo.simbolo == "F" || atomo.simbolo == "Cl") {
+        if (Atomos::isTextoOscuro(atomo.simbolo)) {
             texto->setBrush(QColor("#111827")); // Gris casi negro
         } else {
             texto->setBrush(QColor("#FFFFFF")); // Blanco puro
@@ -226,28 +227,4 @@ void MoleculaLienzo::mousePressEvent(QMouseEvent* mouseEv){
     }
 
     QGraphicsView::mousePressEvent(mouseEv);
-}
-
-//##############################################################################################
-// Funciones Privadas
-//#############################################################################################
-
-qreal MoleculaLienzo::getRadioFromAtomo(const Atomo& atomo){
-    if (atomo.simbolo == "C") return 36;
-    if (atomo.simbolo == "H") return 24;
-    if (atomo.simbolo == "O") return 32;
-    if (atomo.simbolo == "N") return 34;
-    return 15;
-}
-
-QColor MoleculaLienzo::getColorFromAtomo(const Atomo& atomo){
-    // Paleta de colores optimizada (Flat / Material Design) adaptada al estándar CPK químico
-    if (atomo.simbolo == "H")  return QColor("#F3F4F6"); // Blanco grisáceo limpio
-    if (atomo.simbolo == "C")  return QColor("#4B5563"); // Gris grafito profesional (no se confunde con el fondo negro)
-    if (atomo.simbolo == "O")  return QColor("#EF4444"); // Rojo coral moderno
-    if (atomo.simbolo == "N")  return QColor("#3B82F6"); // Azul cobalto eléctrico
-    if (atomo.simbolo == "S")  return QColor("#FBBF24"); // Amarillo azufre pastel
-    if (atomo.simbolo == "P")  return QColor("#F97316"); // Naranja brillante
-    if (atomo.simbolo == "F" || atomo.simbolo == "Cl") return QColor("#10B981"); // Verde esmeralda claro
-    return QColor("#EC4899"); // Magenta/Rosa chicle para elementos no identificados
 }

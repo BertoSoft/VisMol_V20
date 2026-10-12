@@ -103,12 +103,10 @@ private:
     // ZONA: VALIDACIONES Y AUXILIARES QUÍMICOS / MATEMÁTICOS
     // =========================================================================
 private:
-    int getIdAtomoFromPos(const QVector3D& posClick);
-    int getValenciaMax(const Atomo& atomo);
-    bool isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2);
-    int getElectronesValenciaNaturales(const Atomo& atomo);
-    int getEnlaces(const Atomo& atomo);
-    float getDistanciaPuntoSegmento(const QVector3D& punto, const QVector3D& pos1, const QVector3D& pos2);
+    int     getIdAtomoFromPos(const QVector3D& posClick);
+    bool    isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2);
+    int     getEnlaces(const Atomo& atomo);
+    float   getDistanciaPuntoSegmento(const QVector3D& punto, const QVector3D& pos1, const QVector3D& pos2);
 
     // =========================================================================
     // ZONA: SEÑALES DE NOTIFICACIÓN (MOBILES DE SINCRONIZACIÓN)

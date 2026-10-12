@@ -20,7 +20,9 @@ qt_add_executable(VisMol_V20
     moleculaview.cpp
     moleculalienzo.cpp
     moleculamat.cpp
-    iconos.qrc            # Mantener el archivo aquí es correcto
+    iconos.qrc
+    atomos.h atomos.cpp
+    datosio.h datosio.cpp            # Mantener el archivo aquí es correcto
 )
 
 target_link_libraries(VisMol_V20
