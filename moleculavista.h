@@ -37,7 +37,6 @@ private:
     void initUi();
     void initMenu();
     void initToolBarSuperior();
-    void initToolBarComentario();
     void initToolBarIzda();
     void initAnimacionBar();
     void initDockPanels();
@@ -55,6 +54,7 @@ private slots:
     void abrirProyecto();
     void cerrarProyecto();
     void guardarProyecto();
+    void editar();
     void salir();
     void importarXYZ();
     void exportarMOPAC();
@@ -92,6 +92,7 @@ private:
         QAction* abrir    = nullptr;
         QAction* guardar  = nullptr;
         QAction* cerrar   = nullptr;
+        QAction* editar   = nullptr;
         QAction* salir    = nullptr;
     } m_accionesArchivo;
 
@@ -135,8 +136,6 @@ private:
 
     // Componentes gráficos del sistema de ventanas
     QToolBar*      m_barraProyecto        = nullptr;
-    QToolBar*      m_barraComentario      = nullptr;
-    QLineEdit*     m_etComentario         = nullptr;
     QToolBar*      m_barraElementos       = nullptr;
     QToolBar*      m_barraAnimacion       = nullptr;
     QActionGroup*  m_grupoElementos       = nullptr;

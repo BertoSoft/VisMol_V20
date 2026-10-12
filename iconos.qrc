@@ -21,5 +21,6 @@
         <file>iconos/atomo_h.png</file>
         <file>iconos/atomo_c.png</file>
         <file>iconos/tabla_periodica.png</file>
+        <file>iconos/editar.png</file>
     </qresource>
 </RCC>

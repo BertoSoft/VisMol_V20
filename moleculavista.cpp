@@ -13,6 +13,8 @@
 #include <QFileDialog>
 #include <QLineEdit>
 #include <QInputDialog>
+#include <QBoxLayout>
+#include <QPushButton>
 
 // =========================================================================
 // ZONA: CICLO DE VIDA DE LA VENTANA
@@ -52,13 +54,6 @@ void MoleculaVista::setMoleculaView(MoleculaView* view){
 
     // Cabñle 4 conecta la señal de menuEliminar con el menu de boton derecho
     connect(m_view, &MoleculaView::setMenuEliminar, this, &MoleculaVista::setMenuBotonDerecho);
-
-    // Cable 5 conecta la señal etComentario::finaledicion con la funcion m_view->setComentario()
-    connect(m_etComentario, &QLineEdit::editingFinished, this, [this](){
-        if(m_view){
-            m_view->setComentario(m_etComentario->text());
-        }
-    });
 
     // Sincronización forzada inicial directa desde el Emisor real:
     m_view->setModoEditor(MoleculaView::ModoSeleccion);
@@ -162,7 +157,6 @@ void MoleculaVista::initUi(){
 
     initMenu();
     initToolBarSuperior();
-    initToolBarComentario();
     initToolBarIzda();
     initAnimacionBar();
     initDockPanels();
@@ -191,6 +185,9 @@ void MoleculaVista::initMenu(){
 
     m_accionesArchivo.guardar = menuArchivo->addAction(tr("Guardar Proyecto (.json)"), QKeySequence::Save, this, &MoleculaVista::guardarProyecto);
     m_accionesArchivo.guardar->setIcon(QIcon(":/iconos/guardar.png"));
+
+    m_accionesArchivo.editar = menuArchivo->addAction(tr("Propiedades del Compuesto..."), this, &MoleculaVista::editar);
+    m_accionesArchivo.editar->setIcon(QIcon(":/iconos/editar.png")); // Asegúrate de tener este icono o uno similar
 
     menuArchivo->addSeparator();
     m_accionesArchivo.salir = menuArchivo->addAction(tr("Salir"), QKeySequence::Quit, this, &MoleculaVista::salir);
@@ -235,6 +232,7 @@ void MoleculaVista::initToolBarSuperior(){
     m_barraProyecto->addAction(m_accionesArchivo.nuevo);
     m_barraProyecto->addAction(m_accionesArchivo.abrir);
     m_barraProyecto->addAction(m_accionesArchivo.guardar);
+    m_barraProyecto->addAction(m_accionesArchivo.editar); // ¡NUEVO! Botón directo en el toolbar
     m_barraProyecto->addAction(m_accionesArchivo.cerrar);
     m_barraProyecto->addSeparator();
     m_barraProyecto->addSeparator();
@@ -246,35 +244,6 @@ void MoleculaVista::initToolBarSuperior(){
     m_barraProyecto->addAction(m_accionesCalculo.configurarMopac);
 
 
-}
-
-void MoleculaVista::initToolBarComentario(){
-    // 1. Instanciamos la barra de herramientas horizontal exclusiva para el comentario
-    m_barraComentario = new QToolBar(tr("Descripción del Compuesto"), this);
-    m_barraComentario->setObjectName("barraComentario");
-
-    // Hace que la barra aparezca debajo de la de proyecto
-    this->addToolBarBreak(Qt::TopToolBarArea);
-
-    addToolBar(Qt::TopToolBarArea, m_barraComentario);
-    m_barraComentario->setMovable(false);
-    m_barraComentario->setFloatable(false);
-
-    // 2. Creamos la etiqueta de texto asignándole un objectName para su diseño en setTemaApp
-    QLabel* lblEtiqueta = new QLabel(tr(" Descripción del Compuesto: "), this);
-    lblEtiqueta->setObjectName("lblEtiquetaComentario");
-    m_barraComentario->addWidget(lblEtiqueta);
-
-    // 3. Instanciamos el cuadro de edición asignándole su objectName correspondiente
-    m_etComentario = new QLineEdit(this);
-    m_etComentario->setObjectName("etComentarioTexto");
-    m_etComentario->setPlaceholderText(tr("Escribe aquí el nombre de la molécula o notas del proyecto..."));
-    m_etComentario->setMaxLength(150);
-
-    m_barraComentario->addWidget(m_etComentario);
-
-    // 4. Estado inicial de fábrica: oculta hasta que el lienzo contenga datos
-    m_barraComentario->setVisible(false);
 }
 
 void MoleculaVista::initToolBarIzda(){
@@ -564,6 +533,58 @@ void MoleculaVista::cerrarProyecto(){
     }
 }
 
+void MoleculaVista::editar(){
+    if (!m_view) return; //
+
+    // 1. Configuración del contenedor del diálogo
+    QDialog dialogoProps(this); //
+    dialogoProps.setWindowTitle(tr("Propiedades del Compuesto")); //
+    dialogoProps.setFixedSize(550, 150); //
+    dialogoProps.setStyleSheet(this->styleSheet()); // Mantiene el tema oscuro
+
+    // 2. Layout principal vertical
+    QVBoxLayout* layoutPrincipal = new QVBoxLayout(&dialogoProps); //
+    layoutPrincipal->setContentsMargins(20, 20, 20, 15); //
+    layoutPrincipal->setSpacing(12); //
+
+    // 3. Componente de texto con fuente más grande
+    QLineEdit* etTexto = new QLineEdit(&dialogoProps); //
+    etTexto->setObjectName("etComentarioTexto");  //
+    etTexto->setPlaceholderText(tr("Nombre de la molécula o notas rápidas del proyecto...")); //
+    etTexto->setText(m_view->getComentario()); //
+    etTexto->setMaxLength(150); //
+
+    QFont fuenteGrande("Segoe UI", 13, QFont::Medium);  //
+    etTexto->setFont(fuenteGrande); //
+    etTexto->setStyleSheet("padding: 6px 10px;");  //
+
+    layoutPrincipal->addWidget(etTexto); //
+
+    // 4. Fila horizontal inferior (Ahora solo con el botón Guardar centrado a la derecha)
+    QHBoxLayout* layoutBotones = new QHBoxLayout(); //
+    layoutBotones->addStretch(); //
+
+    QPushButton* btnGuardar = new QPushButton(tr("Guardar"), &dialogoProps); //
+    btnGuardar->setStyleSheet("background-color: #0f52ba; color: white; font-weight: bold; padding: 6px 20px; min-width: 80px;"); //
+    btnGuardar->setDefault(true); // Permite guardar directamente al pulsar 'Enter' en el teclado
+
+    layoutBotones->addWidget(btnGuardar); //
+    layoutPrincipal->addLayout(layoutBotones); //
+
+    // 5. Conexión del botón único
+    connect(btnGuardar, &QPushButton::clicked, &dialogoProps, &QDialog::accept); //
+
+    // 6. Foco y selección automática del texto
+    etTexto->setFocus(); //
+    etTexto->selectAll(); //
+
+    // 7. Ejecución del diálogo modal
+    if (dialogoProps.exec() == QDialog::Accepted) { //
+        m_view->setComentario(etTexto->text().trimmed()); //
+        m_lblEstadoTexto->setText(tr(" Descripción del compuesto actualizada.")); //
+    }
+}
+
 void MoleculaVista::salir()           { this->close(); }
 
 void MoleculaVista::importarXYZ()     {}
@@ -632,22 +653,13 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
         m_panelFrecuencias->setVisible(false);
         m_panelConsola->setVisible(false);
         m_barraAnimacion->setVisible(false);
-        m_etComentario->clear();
-        m_barraComentario->setVisible(false);
-    }
-    else {
-        // ¡NUEVO!: Si no está vacío (al abrir o dibujar el primer átomo), la barra aparece
-        m_barraComentario->setVisible(true);
-
-        if (!m_etComentario->hasFocus()) {
-            m_etComentario->setText(m_view->getComentario());
-        }
     }
 
     // =========================================================================
     // REGLA 4: CONTROL POR PERSISTENCIA (estaGuardado)
     // =========================================================================
     m_accionesArchivo.guardar->setEnabled(!modoLienzo.estaVacio);
+    m_accionesArchivo.editar->setEnabled(modoLienzo.estaIniciado);
 
     // =========================================================================
     // REGLA 5: TÍTULO DINÁMICO DE LA VENTANA
@@ -930,41 +942,7 @@ void MoleculaVista::setTemaApp(){
         "font-family: 'Consolas', monospace; "
         "font-size: 12px; "
         "padding: 8px; "
-        "}"
-
-        /* =========================================================================
-           BARRA DE CONTEXTO / COMENTARIO DE COMPUESTO (DINÁMICA)
-           ========================================================================= */
-        "QToolBar#barraComentario { "
-        "   background-color: #222222; " /* Mismo fondo que la barra superior */
-        "   border-bottom: 1px solid #2d2d2d; "
-        "   border-top: none; "
-        "   border-left: none; "
-        "   border-right: none; "
-        "   padding: 4px 6px; "
-        "}"
-
-        "QLabel#lblEtiquetaComentario { "
-        "   color: #3b82f6; " /* Azul vibrante corporativo */
-        "   font-weight: bold; "
-        "   font-size: 13px; "
-        "   padding-right: 4px; "
-        "}"
-
-        "QLineEdit#etComentarioTexto { "
-        "   background-color: #141414; "
-        "   color: #e5e5e5; "
-        "   border: 1px solid #3a3a3a; "
-        "   border-radius: 4px; "
-        "   padding: 4px 8px; "
-        "   font-size: 13px; "
-        "}"
-
-        "QLineEdit#etComentarioTexto:focus { "
-        "   border: 1px solid #0f52ba; " /* Brillo azul zafiro al editar */
-        "   background-color: #181818; "
         "}";
-
 
 
     this->setStyleSheet(estilo);
