@@ -22,7 +22,8 @@ qt_add_executable(VisMol_V20
     moleculamat.cpp
     iconos.qrc
     atomos.h atomos.cpp
-    datosio.h datosio.cpp            # Mantener el archivo aquí es correcto
+    datosio.h datosio.cpp
+    dialogomopac.h dialogomopac.cpp             # Mantener el archivo aquí es correcto
 )
 
 target_link_libraries(VisMol_V20

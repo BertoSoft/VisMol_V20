@@ -15,6 +15,7 @@ public:
     static int     getMaxValencia(const QString& simbolo);
     static QColor  getColor(const QString& simbolo);
     static bool    isTextoOscuro(const QString& simbolo);
+    static bool    isCompatibles(const QString& simbolo1, const QString& simbolo2);
 
 private:
 
@@ -29,7 +30,7 @@ private:
     };
 
     static void            initAtomos();
-    static Atomo           getAtomo(const QString& simbolo);
+    static const Atomo&    getAtomo(const QString& simbolo);
 
     static QList<Atomo>   m_listaAtomos;
 };

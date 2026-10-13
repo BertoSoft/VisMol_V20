@@ -1,5 +1,6 @@
 #include "moleculavista.h"
 #include "moleculaview.h"
+#include "dialogomopac.h"
 
 #include <QMenu>
 #include <QMenuBar>
@@ -52,12 +53,12 @@ void MoleculaVista::setMoleculaView(MoleculaView* view){
     // Cable 3 (¡NUEVO!): Desvía el texto generado por el negocio hacia la barra de estado de la UI
     connect(m_view, &MoleculaView::notificarMensajeEstado, m_lblEstadoTexto, &QLabel::setText);
 
-    // Cabñle 4 conecta la señal de menuEliminar con el menu de boton derecho
+    // Cable 4 conecta la señal de menuEliminar con el menu de boton derecho
     connect(m_view, &MoleculaView::setMenuEliminar, this, &MoleculaVista::setMenuBotonDerecho);
 
     // Sincronización forzada inicial directa desde el Emisor real:
     m_view->setModoEditor(MoleculaView::ModoSeleccion);
-    emit m_view->modoLienzoCambiado(m_view->getModoLienzo());
+    //emit m_view->modoLienzoCambiado(m_view->getModoLienzo());
 }
 
 // =========================================================================
@@ -69,24 +70,40 @@ QString MoleculaVista::dialogoAbrirArchivo(){
         this,
         tr("Abrir Proyecto VisMol"),
         "",
-        tr("Archivos de MOPAC / VisMol / XYZ (*.mop *.vismol *.xyz)")
+        tr("Archivos de MOPAC / VisMol / XYZ (*.dat *.vismol *.xyz)")
         );
 }
 
-QString MoleculaVista::dialogoGuardarArchivo(){
-    QString ruta = QFileDialog::getSaveFileName(
-        this,
-        tr("Guardar Proyecto VisMol"),
-        "",
-        tr("Archivos XYZ (*.xyz);;Entradas de MOPAC (*.mop);;Archivos de VisMol (*.vismol)")
-        );
+QString MoleculaVista::dialogoGuardarArchivo(const QString& filtro){
+    QString titulo;
+    QString extensionesSoportadas;
+    QString extDefecto = filtro.toLower().trimmed();
 
-    if(!ruta.isEmpty()){
+    // El diálogo se adapta dinámicamente a la intención del flujo
+    if (extDefecto == ".dat" || extDefecto == ".mop") {
+        titulo = tr("Exportar Entrada de MOPAC");
+        extensionesSoportadas = tr("Entradas de MOPAC (*.dat *.mop)");
+        extDefecto = "dat"; // Extensión estándar por defecto para tu DatosIO
+    }
+    else if (extDefecto == ".xyz") {
+        titulo = tr("Exportar Coordenadas Cartesianas");
+        extensionesSoportadas = tr("Archivos XYZ (*.xyz)");
+    }
+    else {
+        // Opción nativa por defecto ("vismol")
+        titulo = tr("Guardar Proyecto VisMol");
+        extensionesSoportadas = tr("Proyectos VisMol (*.vismol)");
+        extDefecto = "vismol";
+    }
+
+    // Lanzamos el QFileDialog nativo inyectando los parámetros limpios
+    QString ruta = QFileDialog::getSaveFileName(this, titulo, "", extensionesSoportadas);
+
+    // Red de seguridad: si el usuario escribe el nombre a mano sin la extensión, se la concatenamos
+    if (!ruta.isEmpty()) {
         QFileInfo info(ruta);
-        QString extension = info.suffix().toLower();
-
-        if(extension != "xyz" && extension != "mop" && extension != "vismol"){
-            ruta += ".xyz";
+        if (info.suffix().toLower() != extDefecto) {
+            ruta += "." + extDefecto;
         }
     }
     return ruta;
@@ -169,35 +186,38 @@ void MoleculaVista::initUi(){
 
 void MoleculaVista::initMenu(){
 
+
     QMenuBar* menuBarSuperior = menuBar();
 
+    // =========================================================================
+    // 1. PASO CIENTÍFICO: GESTIÓN DE PROYECTO (ARCHIVO)
+    // =========================================================================
     QMenu* menuArchivo = menuBarSuperior->addMenu(tr("&Archivo"));
 
-    // CORREGIDO: El atajo de teclado pasa a ser el segundo argumento, antes de 'this'
     m_accionesArchivo.nuevo = menuArchivo->addAction(tr("Nuevo Proyecto"), QKeySequence::New, this, &MoleculaVista::nuevoProyecto);
     m_accionesArchivo.nuevo->setIcon(QIcon(":/iconos/nuevo.png"));
 
-    m_accionesArchivo.abrir = menuArchivo->addAction(tr("Abrir Proyecto (.json)"), QKeySequence::Open, this, &MoleculaVista::abrirProyecto);
+    m_accionesArchivo.abrir = menuArchivo->addAction(tr("Abrir Proyecto / Archivo..."), QKeySequence::Open, this, &MoleculaVista::abrirProyecto);
     m_accionesArchivo.abrir->setIcon(QIcon(":/iconos/abrir.png"));
+
+    m_accionesArchivo.guardar = menuArchivo->addAction(tr("Guardar Proyecto"), QKeySequence::Save, this, &MoleculaVista::guardarProyecto);
+    m_accionesArchivo.guardar->setIcon(QIcon(":/iconos/guardar.png"));
+
+    m_accionesArchivo.guardarComo = menuArchivo->addAction(tr("Guardar Proyecto en ..."), QKeySequence::SaveAs, this, &MoleculaVista::guardarProyectoComo);
+    m_accionesArchivo.guardarComo->setIcon(QIcon(":/iconos/guardar_como.png"));
 
     m_accionesArchivo.cerrar = menuArchivo->addAction(tr("Cerrar Proyecto"), QKeySequence::Close, this, &MoleculaVista::cerrarProyecto);
     m_accionesArchivo.cerrar->setIcon(QIcon(":/iconos/cerrar.png"));
-
-    m_accionesArchivo.guardar = menuArchivo->addAction(tr("Guardar Proyecto (.json)"), QKeySequence::Save, this, &MoleculaVista::guardarProyecto);
-    m_accionesArchivo.guardar->setIcon(QIcon(":/iconos/guardar.png"));
-
-    m_accionesArchivo.editar = menuArchivo->addAction(tr("Propiedades del Compuesto..."), this, &MoleculaVista::editar);
-    m_accionesArchivo.editar->setIcon(QIcon(":/iconos/editar.png")); // Asegúrate de tener este icono o uno similar
 
     menuArchivo->addSeparator();
     m_accionesArchivo.salir = menuArchivo->addAction(tr("Salir"), QKeySequence::Quit, this, &MoleculaVista::salir);
     m_accionesArchivo.salir->setIcon(QIcon(":/iconos/salir.png"));
 
-    QMenu* menuFormatos = menuBarSuperior->addMenu(tr("&Importar/Exportar"));
-    m_accionesIO.importarXYZ = menuFormatos->addAction(tr("Importar Coordenadas XYZ (.xyz)"), this, &MoleculaVista::importarXYZ);
-    m_accionesIO.exportarMOPAC = menuFormatos->addAction(tr("Exportar Entrada MOPAC (.mop)"), this, &MoleculaVista::exportarMOPAC);
-
+    // =========================================================================
+    // 2. PASO CIENTÍFICO: CONSTRUCCIÓN Y GEOMETRÍA (EDICIÓN)
+    // =========================================================================
     QMenu* menuEdicion = menuBarSuperior->addMenu(tr("&Edición"));
+
     m_accionesEdicion.deshacer = menuEdicion->addAction(tr("Deshacer"), QKeySequence::Undo, this, &MoleculaVista::deshacer);
     m_accionesEdicion.deshacer->setIcon(QIcon(":/iconos/deshacer.png"));
 
@@ -205,45 +225,65 @@ void MoleculaVista::initMenu(){
     m_accionesEdicion.rehacer->setIcon(QIcon(":/iconos/rehacer.png"));
 
     menuEdicion->addSeparator();
+    m_accionesEdicion.editar = menuEdicion->addAction(tr("Propiedades del Compuesto..."), this, &MoleculaVista::editar);
+    m_accionesEdicion.editar->setIcon(QIcon(":/iconos/editar.png"));
+
+    menuEdicion->addSeparator();
     m_accionesEdicion.limpiarLienzo = menuEdicion->addAction(tr("Limpiar Lienzo"), this, &MoleculaVista::limpiarLienzo);
     m_accionesEdicion.limpiarLienzo->setIcon(QIcon(":/iconos/limpiar.png"));
 
+    // =========================================================================
+    // 3. PASO CIENTÍFICO: EJECUCIÓN CUÁNTICA (CÁLCOLO) - ESCALABLE
+    // =========================================================================
     QMenu* menuCalculo = menuBarSuperior->addMenu(tr("&Cálculo"));
-    m_accionesCalculo.configurarMopac = menuCalculo->addAction(tr("Configurar Simulación MOPAC..."), this, &MoleculaVista::configurarMopac);
+
+    // Submenú dedicado a MOPAC para permitir meter otros motores en el futuro
+    QMenu* subMenuMopac = menuCalculo->addMenu(tr("Motor MOPAC"));
+
+    m_accionesCalculo.configurarMopac = subMenuMopac->addAction(tr("Configurar y Lanzar Simulación..."), this, &MoleculaVista::configurarMopac);
     m_accionesCalculo.configurarMopac->setIcon(QIcon(":/iconos/configurar.png"));
 
+    // =========================================================================
+    // 4. PASO CIENTÍFICO: INTERPRETACIÓN DE RESULTADOS (ANÁLISIS)
+    // =========================================================================
     QMenu* menuAnalisis = menuBarSuperior->addMenu(tr("&Análisis"));
-    m_accionesAnalisis.mostrarFreq = menuAnalisis->addAction(tr("Mostrar Analizador Vibracional"), this, &MoleculaVista::mostrarFrecuencias);
-    m_accionesAnalisis.mostrarConsola = menuAnalisis->addAction(tr("Mostrar Monitor de Simulación"), this, [this](){
+
+    m_accionesAnalisis.mostrarFreq = menuAnalisis->addAction(tr("Espectroscopía Vibracional (IR)"), this, &MoleculaVista::mostrarFrecuencias);
+    m_accionesAnalisis.mostrarFreq->setIcon(QIcon(":/iconos/frecuencias.png"));
+
+    m_accionesAnalisis.verLogOut = menuAnalisis->addAction(tr("Examinar Registro de Salida (.out)"), this, &MoleculaVista::verLogOut);
+    m_accionesAnalisis.verLogOut->setIcon(QIcon(":/iconos/log.png"));
+
+    // =========================================================================
+    // 5. GESTIÓN DEL ENTORNO GRÁFICO (MONITOR)
+    // =========================================================================
+    QMenu* menuMonitor = menuBarSuperior->addMenu(tr("&Monitor"));
+
+    m_accionesAnalisis.mostrarConsola = menuMonitor->addAction(tr("Consola de Simulación en Vivo"), this, [this](){
         if(m_panelConsola) m_panelConsola->setVisible(!m_panelConsola->isVisible());
     });
-    m_accionesAnalisis.verLogOut = menuAnalisis->addAction(tr("Ver Log de Salida MOPAC (.out)"), this, &MoleculaVista::verLogOut);
+    m_accionesAnalisis.mostrarConsola->setCheckable(true);
+    m_accionesAnalisis.mostrarConsola->setChecked(true);
 }
 
 void MoleculaVista::initToolBarSuperior(){
-
-
-    // =========================================================================
-    // BARRA SUPERIOR: GESTIÓN DE PROYECTO Y ACCIONES GENERALES
-    // =========================================================================
     m_barraProyecto = addToolBar(tr("Proyecto"));
     m_barraProyecto->setObjectName("barraProyecto");
+
     m_barraProyecto->addAction(m_accionesArchivo.salir);
     m_barraProyecto->addAction(m_accionesArchivo.nuevo);
     m_barraProyecto->addAction(m_accionesArchivo.abrir);
     m_barraProyecto->addAction(m_accionesArchivo.guardar);
-    m_barraProyecto->addAction(m_accionesArchivo.editar); // ¡NUEVO! Botón directo en el toolbar
+    m_barraProyecto->addAction(m_accionesArchivo.guardarComo);
     m_barraProyecto->addAction(m_accionesArchivo.cerrar);
     m_barraProyecto->addSeparator();
-    m_barraProyecto->addSeparator();
+
     m_barraProyecto->addAction(m_accionesEdicion.deshacer);
     m_barraProyecto->addAction(m_accionesEdicion.rehacer);
     m_barraProyecto->addAction(m_accionesEdicion.limpiarLienzo);
     m_barraProyecto->addSeparator();
-    m_barraProyecto->addSeparator();
+
     m_barraProyecto->addAction(m_accionesCalculo.configurarMopac);
-
-
 }
 
 void MoleculaVista::initToolBarIzda(){
@@ -251,10 +291,11 @@ void MoleculaVista::initToolBarIzda(){
     // =========================================================================
     // BARRA LATERAL: HERRAMIENTAS Y ELEMENTOS QUÍMICOS (MINIMALISTA)
     // =========================================================================
-    m_barraElementos = new QToolBar(tr("Herramientas de Elementos"), this);
+    m_barraElementos = new QToolBar(tr("Herramientas de Elementos"));
     m_barraElementos->setObjectName("barraElementos");
     m_barraElementos->setOrientation(Qt::Vertical);
-    m_barraElementos->setToolButtonStyle(Qt::ToolButtonIconOnly);     addToolBar(Qt::LeftToolBarArea, m_barraElementos);
+    m_barraElementos->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    addToolBar(Qt::LeftToolBarArea, m_barraElementos);
 
     // --- SUBSECCIÓN A: HERRAMIENTAS DE INTERACCIÓN ---
     m_accionesElementos.modoSeleccion = new QAction(tr("Seleccionar"), this);
@@ -283,19 +324,19 @@ void MoleculaVista::initToolBarIzda(){
 
 
     // --- SUBSECCIÓN B: ELEMENTOS QUÍMICOS VIGENTES ---
-    m_accionesElementos.carbono = new QAction(tr("Carbono"), this);
+    m_accionesElementos.carbono = new QAction(tr("Carbono"));
     m_accionesElementos.carbono->setCheckable(true);
     m_accionesElementos.carbono->setIcon(QIcon(":/iconos/atomo_c.png"));
 
-    m_accionesElementos.hidrogeno = new QAction(tr("Hidrógeno"), this);
+    m_accionesElementos.hidrogeno = new QAction(tr("Hidrógeno"));
     m_accionesElementos.hidrogeno->setCheckable(true);
     m_accionesElementos.hidrogeno->setIcon(QIcon(":/iconos/atomo_h.png"));
 
-    m_accionesElementos.oxigeno = new QAction(tr("Oxígeno"), this);
+    m_accionesElementos.oxigeno = new QAction(tr("Oxígeno"));
     m_accionesElementos.oxigeno->setCheckable(true);
     m_accionesElementos.oxigeno->setIcon(QIcon(":/iconos/atomo_o.png"));
 
-    m_accionesElementos.nitrogeno = new QAction(tr("Nitrógeno"), this);
+    m_accionesElementos.nitrogeno = new QAction(tr("Nitrógeno"));
     m_accionesElementos.nitrogeno->setCheckable(true);
     m_accionesElementos.nitrogeno->setIcon(QIcon(":/iconos/atomo_n.png"));
 
@@ -333,7 +374,7 @@ void MoleculaVista::initPanelConsola(){
     m_panelConsola->setObjectName("panelConsolaMopac");
     m_panelConsola->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
 
-    m_textoConsola = new QTextEdit(m_panelConsola);
+    m_textoConsola = new QTextEdit();
     m_textoConsola->setObjectName("textConsolaMopac");
     m_textoConsola->setReadOnly(true);
 
@@ -355,7 +396,7 @@ void MoleculaVista::initAnimacionBar(){
     // MODIFICACIÓN DE CENTRADO COMPLETO (WIDGETS ESPACIADORES ELÁSTICOS)
     // =========================================================================
     // 1. Creamos el espaciador izquierdo
-    QWidget* espaciadorIzquierdo = new QWidget(this);
+    QWidget* espaciadorIzquierdo = new QWidget();
     espaciadorIzquierdo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     m_barraAnimacion->addWidget(espaciadorIzquierdo);
 
@@ -366,12 +407,12 @@ void MoleculaVista::initAnimacionBar(){
     m_accionesAnimacion.fotogramaAnterior = new QAction(tr("<< Paso Anter."), this);
     m_accionesAnimacion.fotogramaSiguiente = new QAction(tr("Paso Siguiente >>"), this);
 
-    m_deslizadorFotogramas = new QSlider(Qt::Horizontal, this);
+    m_deslizadorFotogramas = new QSlider(Qt::Horizontal);
     m_deslizadorFotogramas->setMinimum(1);
     m_deslizadorFotogramas->setMaximum(10);
     m_deslizadorFotogramas->setFixedWidth(250);
 
-    m_lblFotogramaInfo = new QLabel(tr("Paso: 1 / 10"), this);
+    m_lblFotogramaInfo = new QLabel(tr("Paso: 1 / 10"));
     m_lblFotogramaInfo->setStyleSheet("padding: 0 8px; font-weight: bold;");
 
     // 3. Añadimos el bloque compacto de controles al lienzo de la barra
@@ -382,7 +423,7 @@ void MoleculaVista::initAnimacionBar(){
     m_barraAnimacion->addWidget(m_lblFotogramaInfo);
 
     // 4. Creamos el espaciador derecho para cerrar el sándwich de centrado
-    QWidget* espaciadorDerecho = new QWidget(this);
+    QWidget* espaciadorDerecho = new QWidget();
     espaciadorDerecho->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     m_barraAnimacion->addWidget(espaciadorDerecho);
 }
@@ -392,7 +433,7 @@ void MoleculaVista::initDockPanels(){
     m_panelFrecuencias->setObjectName("panelFrecuencias");
     m_panelFrecuencias->setAllowedAreas(Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
 
-    m_listaFrecuencias = new QListWidget(m_panelFrecuencias);
+    m_listaFrecuencias = new QListWidget();
     m_listaFrecuencias->setObjectName("listaFrecuencias");
     m_listaFrecuencias->addItem("3120.4 cm⁻¹ - Tensión C-H (Simétrica)");
     m_listaFrecuencias->addItem("1650.1 cm⁻¹ - Estiramiento C=C");
@@ -406,9 +447,9 @@ void MoleculaVista::initStatusBar(){
     m_barraEstado = new QStatusBar(this);
     setStatusBar(m_barraEstado);
 
-    m_lblEstadoTexto = new QLabel(tr(" Listo para iniciar proyecto."), this);
-    m_lblEstadoFecha = new QLabel(this);
-    m_lblEstadoHora  = new QLabel(this);
+    m_lblEstadoTexto = new QLabel(tr(" Listo para iniciar proyecto."));
+    m_lblEstadoFecha = new QLabel();
+    m_lblEstadoHora  = new QLabel();
 
     QList<QLabel*> etiquetas = { m_lblEstadoTexto, m_lblEstadoFecha, m_lblEstadoHora };
     for (QLabel* etiqueta : etiquetas) {
@@ -490,39 +531,84 @@ void MoleculaVista::abrirProyecto(){
     QString ruta = dialogoAbrirArchivo();
 
     if (!ruta.isEmpty()) {
-        // 3. Ordenamos al cerebro cargar el archivo en modo transaccional seguro
-        QString error = m_view->loadFileVisMol(ruta);
+        // 3. ENVIAR DIRECTAMENTE LA RUTA AL CEREBRO Y RECIBIR EL RESULTADO
+        // La vista no sabe (ni le importa) si el archivo es .vismol, .out, .dat o .xyz
+        QString error = m_view->abrirArchivo(ruta);
 
-        // 4. Si el cerebro reporta un fallo de lectura o formato, avisamos formalmente
-        if (!error.isEmpty()) {
+        // 4. GESTIÓN EXCLUSIVA DE ALERTAS GRÁFICAS SEGÚN LA RESPUESTA
+        if (error == "AVISO_TOPOLOGIA") {
+            // Escenario controlado de advertencia de tu lógica de MOPAC
+            QMessageBox::information(
+                this,
+                tr("Información de Topología"),
+                tr("La geometría cuántica se cargó con éxito, pero no se localizó el archivo espejo "
+                   "de enlaces (.vismol) en el directorio.\n\nLos enlaces deberán asignarse manualmente."),
+                QMessageBox::Ok
+                );
+        }
+        else if (!error.isEmpty()) {
+            // Escenario de error crítico real (archivo corrupto, no soportado, etc.)
             QMessageBox::critical(
                 this,
                 tr("Error al abrir archivo"),
-                QString("Se produjo un error al intentar leer el proyecto:\n%1").arg(error),
+                QString("Se produjo un error al intentar leer el archivo molecular:\n%1").arg(error),
                 QMessageBox::Ok
                 );
         }
     }
 }
+
 void MoleculaVista::guardarProyecto(){
     if (!m_view) return;
 
-    // 1. Obtenemos directamente la ruta física de destino usando el explorador de archivos nativo
-    QString ruta = dialogoGuardarArchivo();
+    // 1. Preguntamos al cerebro si ya tiene una ruta en memoria
+    QString ruta    = m_view->getRutaArchivoActual();
+    QString filtro  = ".vismol";
 
-    // 2. Si la ruta es válida, disparamos la orden de escritura hacia el negocio de forma inmediata
+    // 2. Si NO hay ruta (proyecto nuevo), llamamos a dialogoGuardar para obtenerla
+    if (ruta.isEmpty()) {
+        ruta = dialogoGuardarArchivo(filtro);
+    }
+
+    // 3. Si tenemos una ruta válida (porque ya existía o porque el usuario la acaba de elegir)
+    // se la enviamos a m_view para que él se arregle con DatosIO
     if (!ruta.isEmpty()) {
-        // El cerebro ya tiene el comentario guardado de forma transparente gracias al cable de QLineEdit
-        QString error = m_view->saveFileVisMol(ruta);
+        QString error = m_view->guardarArchivo(ruta);
 
-        // Si el motor físico de disco reporta un fallo, notificamos al usuario
+        // Gestión de la alerta gráfica en la interfaz
         if (!error.isEmpty()) {
             QMessageBox::critical(
                 this,
-                tr("Error al guardar archivo"),
+                tr("Error al guardar"),
                 QString("Se produjo un error al intentar escribir el archivo:\n%1").arg(error),
                 QMessageBox::Ok
                 );
+        } else {
+            m_lblEstadoTexto->setText(tr(" Proyecto guardado correctamente en: %1").arg(QFileInfo(ruta).fileName()));
+        }
+    }
+}
+
+void MoleculaVista::guardarProyectoComo(){
+    if (!m_view) return;
+
+    QString filtro = ".vismol";
+
+    // "Guardar como" se salta la pregunta de la memoria y va directo a pedir una nueva ruta
+    QString nuevaRuta = dialogoGuardarArchivo(filtro);
+
+    if (!nuevaRuta.isEmpty()) {
+        QString error = m_view->guardarArchivo(nuevaRuta);
+
+        if (!error.isEmpty()) {
+            QMessageBox::critical(
+                this,
+                tr("Error al guardar como"),
+                QString("Se produjo un error al intentar clonar el archivo:\n%1").arg(error),
+                QMessageBox::Ok
+                );
+        } else {
+            m_lblEstadoTexto->setText(tr(" Nuevo archivo de proyecto creado en: %1").arg(QFileInfo(nuevaRuta).fileName()));
         }
     }
 }
@@ -534,62 +620,34 @@ void MoleculaVista::cerrarProyecto(){
 }
 
 void MoleculaVista::editar(){
-    if (!m_view) return; //
+    if (!m_view) return;
 
-    // 1. Configuración del contenedor del diálogo
-    QDialog dialogoProps(this); //
-    dialogoProps.setWindowTitle(tr("Propiedades del Compuesto")); //
-    dialogoProps.setFixedSize(550, 150); //
-    dialogoProps.setStyleSheet(this->styleSheet()); // Mantiene el tema oscuro
+    bool ok;
+    // Desplegamos el cuadro de diálogo nativo capturando el texto plano
+    QString nuevoComentario = QInputDialog::getText(
+        this,
+        tr("Propiedades del Compuesto"),
+        tr("Comentario / Título de la estructura molecular:"),
+        QLineEdit::Normal,
+        m_view->getComentario(), // Getter público totalmente legal
+        &ok
+        );
 
-    // 2. Layout principal vertical
-    QVBoxLayout* layoutPrincipal = new QVBoxLayout(&dialogoProps); //
-    layoutPrincipal->setContentsMargins(20, 20, 20, 15); //
-    layoutPrincipal->setSpacing(12); //
+    // Si el usuario acepta la ventana, actualizamos el cerebro a través de su interfaz pública
+    if (ok) {
+        m_view->setComentario(nuevoComentario); // Método público del bloque 2
 
-    // 3. Componente de texto con fuente más grande
-    QLineEdit* etTexto = new QLineEdit(&dialogoProps); //
-    etTexto->setObjectName("etComentarioTexto");  //
-    etTexto->setPlaceholderText(tr("Nombre de la molécula o notas rápidas del proyecto...")); //
-    etTexto->setText(m_view->getComentario()); //
-    etTexto->setMaxLength(150); //
+        // Sincronización indirecta legal: notificamos un refresco de estado al editor
+        // Esto forzará al lienzo a redibujarse y mantendrá la coherencia de la UI
+        m_view->setModoEditor(m_view->getModoEditor());
 
-    QFont fuenteGrande("Segoe UI", 13, QFont::Medium);  //
-    etTexto->setFont(fuenteGrande); //
-    etTexto->setStyleSheet("padding: 6px 10px;");  //
-
-    layoutPrincipal->addWidget(etTexto); //
-
-    // 4. Fila horizontal inferior (Ahora solo con el botón Guardar centrado a la derecha)
-    QHBoxLayout* layoutBotones = new QHBoxLayout(); //
-    layoutBotones->addStretch(); //
-
-    QPushButton* btnGuardar = new QPushButton(tr("Guardar"), &dialogoProps); //
-    btnGuardar->setStyleSheet("background-color: #0f52ba; color: white; font-weight: bold; padding: 6px 20px; min-width: 80px;"); //
-    btnGuardar->setDefault(true); // Permite guardar directamente al pulsar 'Enter' en el teclado
-
-    layoutBotones->addWidget(btnGuardar); //
-    layoutPrincipal->addLayout(layoutBotones); //
-
-    // 5. Conexión del botón único
-    connect(btnGuardar, &QPushButton::clicked, &dialogoProps, &QDialog::accept); //
-
-    // 6. Foco y selección automática del texto
-    etTexto->setFocus(); //
-    etTexto->selectAll(); //
-
-    // 7. Ejecución del diálogo modal
-    if (dialogoProps.exec() == QDialog::Accepted) { //
-        m_view->setComentario(etTexto->text().trimmed()); //
-        m_lblEstadoTexto->setText(tr(" Descripción del compuesto actualizada.")); //
+        m_lblEstadoTexto->setText(tr(" Descripción del compuesto químico actualizada correctamente."));
     }
 }
 
-void MoleculaVista::salir()           { this->close(); }
-
-void MoleculaVista::importarXYZ()     {}
-
-void MoleculaVista::exportarMOPAC()   {}
+void MoleculaVista::salir(){
+    this->close();
+}
 
 void MoleculaVista::deshacer(){
     if (m_view) {
@@ -603,9 +661,20 @@ void MoleculaVista::rehacer(){
     }
 }
 
-void MoleculaVista::limpiarLienzo()   {m_view->limpiarLienzo();}
+void MoleculaVista::limpiarLienzo(){
+    m_view->limpiarLienzo();
+}
 
-void MoleculaVista::configurarMopac() {}
+void MoleculaVista::configurarMopac(){
+    if (!m_view) return;
+
+    // 1. Instanciamos la ventana por código pasándole "this" (esta misma vista) como jefa y padre visual
+    DialogoMopac dialogo(this, this);
+
+    // 2. Bloqueamos la interfaz principal y mostramos el diálogo en modo modal
+    // exec() se queda esperando pacientemente en silencio a que el usuario pulse "Exportar", "Lanzar" o "Cancelar"
+    dialogo.exec();
+}
 
 void MoleculaVista::mostrarFrecuencias(){}
 
@@ -617,21 +686,17 @@ void MoleculaVista::verLogOut()        {}
 
 void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLienzo){
 
-    // =========================================================================
-    // REGLA 1: GESTIÓN DE LA BARRA DE HERRAMIENTAS LATERAL (FÁBRICA)
-    // =========================================================================
-    // La barra de elementos se enciende única y exclusivamente si hay un proyecto activo
+    // REGLA 1: La barra de herramientas para dibujar átomos solo se activa si hay un lienzo iniciado
     m_barraElementos->setEnabled(modoLienzo.estaIniciado);
 
-    // =========================================================================
-    // REGLA 2: CONTROL POR CONTENIDO (estaVacio) - DISPONIBILIDAD DE ACTIONS
-    // =========================================================================
+    // REGLA 2: Acciones de archivo básicas de limpieza y cierre de documentos
     m_accionesArchivo.cerrar->setEnabled(!modoLienzo.estaVacio);
     m_accionesEdicion.limpiarLienzo->setEnabled(!modoLienzo.estaVacio);
-    m_accionesIO.exportarMOPAC->setEnabled(!modoLienzo.estaVacio);
-    m_accionesCalculo.configurarMopac->setEnabled(!modoLienzo.estaVacio);
+    m_accionesArchivo.guardar->setEnabled(!modoLienzo.estaVacio);
+    m_accionesArchivo.guardarComo->setEnabled(!modoLienzo.estaVacio);
+    m_accionesEdicion.editar->setEnabled(modoLienzo.estaIniciado);
 
-    // ¡MODIFICADO!: Disponibilidad inteligente basada en el inventario real de las pilas
+    // REGLA 3: Historial dinámico basado en las pilas del negocio molecular
     if (m_view) {
         m_accionesEdicion.deshacer->setEnabled(m_view->hayPasado());
         m_accionesEdicion.rehacer->setEnabled(m_view->hayFuturo());
@@ -640,36 +705,42 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
         m_accionesEdicion.rehacer->setEnabled(false);
     }
 
+    // REGLA 4: Las herramientas de interacción avanzada exigen que existan átomos en pantalla
     m_accionesElementos.modoEnlace->setEnabled(!modoLienzo.estaVacio);
     m_accionesElementos.modoRotar->setEnabled(!modoLienzo.estaVacio);
+
+    // REGLA 5: Bloque de Simulación y Post-Procesado (Cálculo y Análisis)
+    m_accionesCalculo.configurarMopac->setEnabled(!modoLienzo.estaVacio);
     m_accionesAnalisis.mostrarFreq->setEnabled(!modoLienzo.estaVacio);
     m_accionesAnalisis.mostrarConsola->setEnabled(!modoLienzo.estaVacio);
     m_accionesAnalisis.verLogOut->setEnabled(!modoLienzo.estaVacio);
 
-    // =========================================================================
-    // REGLA 3: CONTROL DE INTERFACES ACOPLABLES Y BARRA DE ESTADO (TEXTO)
-    // =========================================================================
+    // REGLA 6: Ocultación automatizada de paneles auxiliares si el lienzo se queda vacío
     if (modoLienzo.estaVacio) {
         m_panelFrecuencias->setVisible(false);
         m_panelConsola->setVisible(false);
         m_barraAnimacion->setVisible(false);
     }
 
-    // =========================================================================
-    // REGLA 4: CONTROL POR PERSISTENCIA (estaGuardado)
-    // =========================================================================
-    m_accionesArchivo.guardar->setEnabled(!modoLienzo.estaVacio);
-    m_accionesArchivo.editar->setEnabled(modoLienzo.estaIniciado);
-
-    // =========================================================================
-    // REGLA 5: TÍTULO DINÁMICO DE LA VENTANA
-    // =========================================================================
+    // REGLA 7: Gestión semántica del título dinámico de la ventana principal
     if (modoLienzo.estaVacio) {
+        // Escenario A: Lienzo limpio y vacío de fábrica, no hay nombre ni asterisco
         setWindowTitle(NOMBRE_APP);
-    } else if (modoLienzo.estaGuardado) {
-        setWindowTitle(NOMBRE_APP + tr(" - Proyecto Guardado"));
-    } else {
-        setWindowTitle(NOMBRE_APP + tr(" - Proyecto Actual* (Cambios sin guardar)"));
+    }
+    else if (modoLienzo.estaGuardado) {
+        // Escenario B: Acabas de abrir un archivo o la Vista acaba de llamar a setRutaArchivoActual.
+        // Obtenemos el nombre limpio del archivo para mostrarlo orgulloso y SIN asterisco.
+        QString nombreArchivo = QFileInfo(m_view->getRutaArchivoActual()).fileName();
+        setWindowTitle(NOMBRE_APP + tr(" - %1").arg(nombreArchivo));
+    }
+    else {
+        // Escenario C: El usuario ha dibujado un átomo, ha borrado un enlace o ha modificado algo.
+        // Obtenemos el nombre actual (o "Sin Título" si es nuevo) y le clavamos el asterisco (*).
+        QString nombreArchivo = m_view->getRutaArchivoActual().isEmpty()
+                                    ? tr("Sin Título")
+                                    : QFileInfo(m_view->getRutaArchivoActual()).fileName();
+
+        setWindowTitle(NOMBRE_APP + tr(" - %1* (Cambios sin guardar)").arg(nombreArchivo));
     }
 }
 

@@ -54,10 +54,9 @@ private slots:
     void abrirProyecto();
     void cerrarProyecto();
     void guardarProyecto();
+    void guardarProyectoComo();
     void editar();
     void salir();
-    void importarXYZ();
-    void exportarMOPAC();
     void deshacer();
     void rehacer();
     void limpiarLienzo();
@@ -88,22 +87,18 @@ protected:
 private:
     // Contenedores semánticos de acciones
     struct AccionesArchivo {
-        QAction* nuevo    = nullptr;
-        QAction* abrir    = nullptr;
-        QAction* guardar  = nullptr;
-        QAction* cerrar   = nullptr;
-        QAction* editar   = nullptr;
-        QAction* salir    = nullptr;
+        QAction* nuevo          = nullptr;
+        QAction* abrir          = nullptr;
+        QAction* guardar        = nullptr;
+        QAction* guardarComo    = nullptr;
+        QAction* cerrar         = nullptr;
+        QAction* salir          = nullptr;
     } m_accionesArchivo;
-
-    struct AccionesIO {
-        QAction* importarXYZ   = nullptr;
-        QAction* exportarMOPAC = nullptr;
-    } m_accionesIO;
 
     struct AccionesEdicion {
         QAction* deshacer      = nullptr;
         QAction* rehacer       = nullptr;
+        QAction* editar        = nullptr;
         QAction* limpiarLienzo = nullptr;
     } m_accionesEdicion;
 
@@ -111,7 +106,7 @@ private:
         QAction* configurarMopac = nullptr;
     } m_accionesCalculo;
 
-    struct AccionesAnálisis {
+    struct AccionesAnalisis {
         QAction* mostrarFreq    = nullptr;
         QAction* mostrarConsola = nullptr;
         QAction* verLogOut      = nullptr;
@@ -162,7 +157,7 @@ private:
 
     bool    sePuedeCerrar();
     QString dialogoAbrirArchivo();
-    QString dialogoGuardarArchivo();
+    QString dialogoGuardarArchivo(const QString& filtro);
     void    setMenuBotonDerecho(const int& idAtomo, const int& idEnlace);
 };
 #endif // MOLECULAVISTA_H

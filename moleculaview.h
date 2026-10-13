@@ -6,7 +6,9 @@
 #include <QVector>
 #include <QVector3D>
 
-// Structures necesarias para el negocio molecular
+// =========================================================================
+// ZONA: ESTRUCTURAS DE DATOS GLOBALES (MODELO QUÍMICO BASE)
+// =========================================================================
 struct Atomo {
     int id;
     QString simbolo;
@@ -24,7 +26,7 @@ class MoleculaView : public QObject
     Q_OBJECT
 
 public:
-    // Enumeraciones del sistema
+    // Enumeraciones del sistema y estructuras de estado de interfaz
     enum ModoEditor {
         ModoSeleccion,
         ModoDibujo,
@@ -39,43 +41,48 @@ public:
     };
 
     // =========================================================================
-    // ZONA: CICLO DE VIDA DEL CEREBRO DE NEGOCIO
+    // 1. ZONA: CICLO DE VIDA DEL CEREBRO DE NEGOCIO
     // =========================================================================
 public:
     explicit MoleculaView(QObject *parent = nullptr);
     ~MoleculaView() override;
 
-    //#########################################################################
-    // ZONA: FUNCIONES PÚBLICAS (CONTROL DE ESTADOS Y HERRAMIENTAS)
-    //#########################################################################
+    // =========================================================================
+    // 2. ZONA: FUNCIONES PÚBLICAS (CONTROL DE ESTADOS Y HERRAMIENTAS)
+    // =========================================================================
 public:
     void        setModoEditor(const ModoEditor& nuevoModo);
     void        setElementoActivo(const QString& simbolo);
     void        setComentario(const QString& comentario);
     void        setNuevoProyecto();
-    QString     loadFileVisMol(const QString& ruta);
-    QString     saveFileVisMol(const QString& ruta);
     void        deshacer();
     void        rehacer();
 
-    //#########################################################################
-    // ZONA: FUNCIONES PÚBLICAS (INTERACCIÓN CON EL ESCENARIO / RATÓN)
-    //#########################################################################
+    // =========================================================================
+    // 3. ZONA: FUNCIONES PÚBLICAS (PERSISTENCIA Y ENTRADA/SALIDA UNIFICADA)
+    // =========================================================================
 public:
-    void setClick(const QVector3D& posClick);
-    void setClickDerecho(const QVector3D& posClickDerecho);
-
-    //#########################################################################
-    // ZONA: FUNCIONES PÚBLICAS (GESTOR DE MEMORIA Y ELIMINACIÓN)
-    //#########################################################################
-public:
-    void delAtomo(const int& idAtomo);
-    void delEnlace(const int& idEnlace);
-    void limpiarLienzo();
-    void cerrarProyecto();
+    QString     abrirArchivo(const QString& ruta); // <--- Punto único de entrada de lectura
+    QString     guardarArchivo(const QString& ruta);
 
     // =========================================================================
-    // ZONA: GETTERS DE ACCESO A DATOS (SOLO LECTURA)
+    // 4. ZONA: FUNCIONES PÚBLICAS (INTERACCIÓN CON EL ESCENARIO / RATÓN)
+    // =========================================================================
+public:
+    void        setClick(const QVector3D& posClick);
+    void        setClickDerecho(const QVector3D& posClickDerecho);
+
+    // =========================================================================
+    // 5. ZONA: FUNCIONES PÚBLICAS (GESTOR DE MEMORIA Y ELIMINACIÓN)
+    // =========================================================================
+public:
+    void        delAtomo(const int& idAtomo);
+    void        delEnlace(const int& idEnlace);
+    void        limpiarLienzo();
+    void        cerrarProyecto();
+
+    // =========================================================================
+    // 6. ZONA: GETTERS DE ACCESO A DATOS (ESTRICTO SOLO LECTURA)
     // =========================================================================
 public:
     ModoEditor      getModoEditor();
@@ -87,55 +94,64 @@ public:
     QString         getComentario();
     bool            hayPasado() const;
     bool            hayFuturo() const;
-
-
-    //#########################################################################
-    // ZONA: INTERNA / PRIVADA (LÓGICA DE NEGOCIO CEREBRAL)
-    //#########################################################################
-private:
-    void setElementoSeleccionado(int idAtomoSeleccionado);
-    void procesarClickDibujoAtomo(const QVector3D& posClick);
-    void procesarClickSeleccion(const QVector3D& posClick);
-    void procesarClickCrearEnlace(const QVector3D& posClick);
-    void procesarClickRotacion(const QVector3D& posClick);
-    void resetVariablesClase();
-    void pushAtras();
-    void popAtras();
-    void pushAdelante();
-    void popAdelante();
+    QString         getRutaArchivoActual();
 
     // =========================================================================
-    // ZONA: GESTOR CENTRALIZADO DE LA SALUD DEL DOCUMENTO
-    // =========================================================================
-private:
-    void setModoLienzo(const ModoLienzo& modoLienzo);
-    void setMensajeEstado();
-
-    // =========================================================================
-    // ZONA: VALIDACIONES Y AUXILIARES QUÍMICOS / MATEMÁTICOS
-    // =========================================================================
-private:
-    int     getIdAtomoFromPos(const QVector3D& posClick);
-    bool    isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2);
-    int     getEnlaces(const Atomo& atomo);
-    float   getDistanciaPuntoSegmento(const QVector3D& punto, const QVector3D& pos1, const QVector3D& pos2);
-
-    // =========================================================================
-    // ZONA: SEÑALES DE NOTIFICACIÓN (MOBILES DE SINCRONIZACIÓN)
+    // 7. ZONA: SEÑALES DE NOTIFICACIÓN (MÓVILES DE SINCRONIZACIÓN VISTA-MODELO)
     // =========================================================================
 signals:
-    void actualizarLienzo();
-    void modoEditorCambiado(MoleculaView::ModoEditor modo);
-    void modoLienzoCambiado(MoleculaView::ModoLienzo modo);
-    void notificarMensajeEstado(const QString& mensaje);
-    void setMenuEliminar(const int& idAtomo, const int& idEnlace);
+    void            actualizarLienzo();
+    void            modoEditorCambiado(MoleculaView::ModoEditor modo);
+    void            modoLienzoCambiado(MoleculaView::ModoLienzo modo);
+    void            notificarMensajeEstado(const QString& mensaje);
+    void            setMenuEliminar(const int& idAtomo, const int& idEnlace);
 
     // =========================================================================
-    // ZONA: ALMACÉN FÍSICO DE VARIABLES PRIVADAS (ESTADOS Y MEMORIA)
+    // 8. ZONA: MÉTODOS INTERNOS PRIVADOS (PROCESAMIENTO DE CLICKS GRÁFICOS)
     // =========================================================================
 private:
+    void        setElementoSeleccionado(int idAtomoSeleccionado);
+    void        procesarClickDibujoAtomo(const QVector3D& posClick);
+    void        procesarClickSeleccion(const QVector3D& posClick);
+    void        procesarClickCrearEnlace(const QVector3D& posClick);
+    void        procesarClickRotacion(const QVector3D& posClick);
 
-    struct FotoActual{
+    // =========================================================================
+    // 9. ZONA: MÉTODOS INTERNOS PRIVADOS (GESTIÓN DE HISTORIAL / PILAS / RESET)
+    // =========================================================================
+private:
+    void        resetVariablesClase();
+    void        pushAtras();
+    void        popAtras();
+    void        pushAdelante();
+    void        popAdelante();
+
+    // =========================================================================
+    // 10. ZONA: MÉTODOS INTERNOS PRIVADOS (ESTADO DE SALUD Y PARSERS ENCAPSULADOS)
+    // =========================================================================
+private:
+    void        setModoLienzo(const ModoLienzo& modoLienzo);
+    void        setMensajeEstado();
+    QString     getTipoArchivo(const QString& ruta); // Tu clasificador inteligente de tokens
+    QString     loadFileVisMol(const QString& ruta); // Oculto y protegido de la interfaz gráfica
+    QString     loadFileMOPAC(const QString& ruta);  // Oculto y protegido de la interfaz gráfica
+    QString     saveFileVisMol(const QString& ruta);
+    QString     saveFileMOPAC(const QString& ruta, const QString& argumentos);
+
+    // =========================================================================
+    // 11. ZONA: MÉTODOS INTERNOS PRIVADOS (VALIDACIONES Y AUXILIARES QUÍMICOS)
+    // =========================================================================
+private:
+    int         getIdAtomoFromPos(const QVector3D& posClick);
+    bool        isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2);
+    int         getEnlaces(const Atomo& atomo);
+    float       getDistanciaPuntoSegmento(const QVector3D& punto, const QVector3D& pos1, const QVector3D& pos2);
+
+    // =========================================================================
+    // 12. ZONA: ALMACÉN FÍSICO DE VARIABLES PRIVADAS (ESTADOS Y MEMORIA EN RAM)
+    // =========================================================================
+private:
+    struct FotoActual {
         QVector<Atomo>      listaAtomos;
         QVector<Enlace>     listaEnlaces;
         int                 contadorIds;
@@ -151,6 +167,7 @@ private:
     QVector<Atomo>          m_listaAtomos;
     QVector<Enlace>         m_listaEnlaces;
     QString                 m_comentario;
+    QString                 m_rutaArchivoActual;
 
     int                     m_contadorIds         = 0;
     int                     m_idAtomoSeleccionado = -1;

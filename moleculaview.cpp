@@ -6,10 +6,11 @@
 #include <QFile>
 #include <QTextStream>
 #include <QRegularExpression>
+#include <QFileInfo>
 
 
 // =========================================================================
-// ZONA: CICLO DE VIDA DEL CEREBRO DE NEGOCIO
+// 1. ZONA: CICLO DE VIDA DEL CEREBRO DE NEGOCIO
 // =========================================================================
 
 MoleculaView::MoleculaView(QObject *parent)
@@ -28,10 +29,10 @@ MoleculaView::~MoleculaView(){
 
 }
 
-//#########################################################################
-// ZONA: FUNCIONES PÚBLICAS (CONTROL DE ESTADOS Y HERRAMIENTAS)
-//#########################################################################
 
+// =========================================================================
+// 2. ZONA: FUNCIONES PÚBLICAS (CONTROL DE ESTADOS Y HERRAMIENTAS)
+// =========================================================================
 void MoleculaView::setModoEditor(const ModoEditor& nuevoModo){
 
     if(getModoEditor() == nuevoModo) return;
@@ -81,65 +82,6 @@ void MoleculaView::setNuevoProyecto(){
     setModoLienzo(modo);
 }
 
-QString MoleculaView::loadFileVisMol(const QString& ruta){
-    if (ruta.isEmpty()) return "Debes especificar un archivo para cargar los datos.";
-
-    // 1. CREAMOS CONTENEDORES TEMPORALES (Si la carga falla, la molécula actual se salva)
-    QVector<Atomo>  listaAtomosTemporal;
-    QVector<Enlace> listaEnlacesTemporal;
-    QString         comentarioTemporal;
-
-    // 2. Invocamos al parseador pasándole las referencias temporales
-    QString error = DatosIO::loadVisMol(ruta, listaAtomosTemporal, listaEnlacesTemporal, comentarioTemporal);
-
-    // 3. EN CASO DE ERROR, ABORTAMOS INMEDIATAMENTE (Sin tocar la memoria de la clase)
-    if (!error.isEmpty()) {
-        return error;
-    }
-
-    // 4. SI LA CARGA FUE UN ÉXITO ABSOLUTO, RESPALDAMOS Y ACTUALIZAMOS LA APLICACIÓN
-    resetVariablesClase(); // Ahora sí, limpiamos con total seguridad
-
-    // Volcamos las estructuras temporales a las variables oficiales de la clase
-    m_listaAtomos  = listaAtomosTemporal;
-    m_listaEnlaces = listaEnlacesTemporal;
-    m_comentario   = comentarioTemporal;
-
-    // Sincronizar el contador interno de IDs buscando el valor más alto cargado
-    int maxId = -1;
-    for (const Atomo& atomo : m_listaAtomos) {
-        if (atomo.id > maxId) {
-            maxId = atomo.id;
-        }
-    }
-    m_contadorIds = maxId;
-
-    // Limpieza profunda del historial al cerrar, limpiar o cambiar de lienzo
-    m_atras.clear();
-    m_adelante.clear();
-
-    // Forzamos el refresco completo de la salud del documento y los widgets de interfaz
-    ModoLienzo modo;
-    modo.estaVacio     = m_listaAtomos.isEmpty();
-    modo.estaGuardado  = true; // Sincronizado con el disco recién abierto
-    modo.estaIniciado  = true; // Enciende las barras de herramientas
-
-    setModoLienzo(modo);
-
-    return ""; // Éxito total
-}
-
-QString MoleculaView::saveFileVisMol(const QString& ruta){
-    // Control de seguridad inicial para evitar rutas vacías
-    if (ruta.isEmpty()) return "Debes especificar unja archivo para guardar los datos.";
-
-    return DatosIO::saveVisMol(ruta, m_listaAtomos, m_listaEnlaces, m_comentario);
-}
-
-// =========================================================================
-// ZONA PÚBLICA: DISPARADORES MAESTROS DE TIEMPO (GATILLOS)
-// =========================================================================
-
 void MoleculaView::deshacer() {
     if (m_atras.isEmpty()) return; // Red de seguridad
 
@@ -170,10 +112,78 @@ void MoleculaView::rehacer() {
     setModoLienzo(m_modoLienzo);
 }
 
+// =========================================================================
+// 3. ZONA: FUNCIONES PÚBLICAS (PERSISTENCIA Y ENTRADA/SALIDA UNIFICADA)
+// =========================================================================
 
-//#########################################################################
-// ZONA: FUNCIONES PÚBLICAS (INTERACCIÓN CON EL ESCENARIO / RATÓN)
-//#########################################################################
+
+QString MoleculaView::abrirArchivo(const QString& ruta){
+    if (ruta.isEmpty()) {
+        return tr("La ruta del archivo especificada está vacía.");
+    }
+
+    QString respuesta = "";
+
+    // 1. Clasificamos el fichero de forma autónoma inspeccionando sus marcas internas
+    QString formatoDeteccion = getTipoArchivo(ruta);
+
+    // 2. ENRUTAMIENTO DIRECTO SEGURO SEGÚN EL CONTENIDO REAL
+    if (formatoDeteccion == ".vismol") {
+        respuesta = loadFileVisMol(ruta); // Tu parseador nativo de proyectos
+    }
+
+    if (formatoDeteccion == ".out") {
+        respuesta = loadFileMOPAC(ruta); // Tu motor de procesamiento cuántico
+    }
+
+    if (formatoDeteccion == ".arc") {
+        // Dejamos el gancho semántico listo para cuando programes este lector
+        respuesta =  tr("Archivo de resumen (.arc) detectado. El lector para este formato se encuentra en desarrollo.");
+    }
+
+    if(formatoDeteccion == "*.*"){
+        // 3. Si devuelve "*.*" o un formato desconocido, abortamos con un mensaje elegante
+        return tr("El archivo seleccionado no contiene ninguna firma molecular o formato reconocido por el sistema.");
+    }
+
+    if(respuesta == ""){
+        m_rutaArchivoActual = ruta;
+        return respuesta;
+    }
+    else{
+        return respuesta;
+    }
+
+}
+
+QString MoleculaView::guardarArchivo(const QString& ruta){
+    if (ruta.isEmpty()) {
+        return tr("La ruta de destino especificada está vacía.");
+    }
+
+    // 1. EJECUCIÓN DIRECTA DE LA ESCRITURA EN FORMATO NATIVO
+    // Toda la lógica cuántica o de otros motores queda desterrada del flujo general
+    QString errorEscribir = DatosIO::saveVisMol(ruta, m_listaAtomos, m_listaEnlaces, m_comentario);
+
+    // =========================================================================
+    // 2. SEÑALIZACIÓN TRANSACCIONAL DE ÉXITO (MEMORIA Y ASTERISCO)
+    // =========================================================================
+    if (errorEscribir.isEmpty()) {
+        m_rutaArchivoActual = ruta.trimmed(); // El cerebro memoriza la ruta real limpia
+
+        m_modoLienzo.estaGuardado = true;
+        m_modoLienzo.estaVacio    = m_listaAtomos.isEmpty();
+
+        // Emitimos la señal para que MoleculaVista borre el asterisco (*) del título
+        emit modoLienzoCambiado(m_modoLienzo);
+    }
+
+    return errorEscribir;
+}
+
+// =========================================================================
+// 4. ZONA: FUNCIONES PÚBLICAS (INTERACCIÓN CON EL ESCENARIO / RATÓN)
+// =========================================================================
 
 void MoleculaView::setClick(const QVector3D& posClick){
     switch(m_modoActual) {
@@ -247,9 +257,9 @@ void MoleculaView::setClickDerecho(const QVector3D& posClickDerecho){
     }
 }
 
-//#########################################################################
-// ZONA: FUNCIONES PÚBLICAS (GESTOR DE MEMORIA Y ELIMINACIÓN)
-//#########################################################################
+// =========================================================================
+// 5. ZONA: FUNCIONES PÚBLICAS (GESTOR DE MEMORIA Y ELIMINACIÓN)
+// =========================================================================
 
 void MoleculaView::delAtomo(const int& idAtomo){
 
@@ -333,7 +343,7 @@ void MoleculaView::cerrarProyecto(){
 }
 
 // =========================================================================
-// ZONA: GETTERS DE ACCESO A DATOS (SOLO LECTURA)
+// 6. ZONA: GETTERS DE ACCESO A DATOS (ESTRICTO SOLO LECTURA)
 // =========================================================================
 
 MoleculaView::ModoEditor MoleculaView::getModoEditor(){
@@ -362,6 +372,10 @@ QString MoleculaView::getComentario(){
     return m_comentario;
 }
 
+MoleculaView::ModoLienzo MoleculaView::getModoLienzo(){
+    return m_modoLienzo;
+}
+
 bool MoleculaView::hayPasado() const {
     return !m_atras.isEmpty();
 }
@@ -370,9 +384,13 @@ bool MoleculaView::hayFuturo() const {
     return !m_adelante.isEmpty();
 }
 
-//#########################################################################
-// ZONA: INTERNA / PRIVADA (LÓGICA DE NEGOCIO CEREBRAL)
-//#########################################################################
+QString MoleculaView::getRutaArchivoActual(){
+    return m_rutaArchivoActual;
+}
+
+// =========================================================================
+// 8. ZONA: MÉTODOS INTERNOS PRIVADOS (PROCESAMIENTO DE CLICKS GRÁFICOS)
+// =========================================================================
 
 void MoleculaView::setElementoSeleccionado(int idAtomoSeleccionado){
 
@@ -491,14 +509,18 @@ void MoleculaView::procesarClickCrearEnlace(const QVector3D& posClick) {
 void MoleculaView::procesarClickRotacion(const QVector3D& posClick) {
 }
 
+// =========================================================================
+// 9. ZONA: MÉTODOS INTERNOS PRIVADOS (GESTIÓN DE HISTORIAL / PILAS / RESET)
+// =========================================================================
 void MoleculaView::resetVariablesClase(){
     // 1. Vaciar contenedores físicos de memoria
     m_listaAtomos.clear();
     m_listaEnlaces.clear();
     m_comentario = "";
+    m_rutaArchivoActual = "";
 
     // 2. Valores numéricos y de control de fábrica
-    m_contadorIds         = -1;
+    m_contadorIds         = 0;
     m_idAtomoSeleccionado = -1;
 
     // 3. Herramientas y estados por defecto al iniciar
@@ -506,10 +528,6 @@ void MoleculaView::resetVariablesClase(){
     m_modoActual          = ModoSeleccion;
 
 }
-
-// =========================================================================
-// ZONA PRIVADA: GESTIÓN INTERNA DE PILAS (ATRAS / ADELANTE)
-// =========================================================================
 
 void MoleculaView::pushAtras() {
     FotoActual foto;
@@ -561,7 +579,7 @@ void MoleculaView::popAdelante() {
 }
 
 // =========================================================================
-// ZONA: GESTOR CENTRALIZADO DE LA SALUD DEL DOCUMENTO
+// 10. ZONA: MÉTODOS INTERNOS PRIVADOS (ESTADO DE SALUD Y PARSERS ENCAPSULADOS)
 // =========================================================================
 
 void MoleculaView::setModoLienzo(const ModoLienzo& modoLienzo){
@@ -600,10 +618,6 @@ void MoleculaView::setModoLienzo(const ModoLienzo& modoLienzo){
     setMensajeEstado();
 }
 
-MoleculaView::ModoLienzo MoleculaView::getModoLienzo(){
-    return m_modoLienzo;
-}
-
 void MoleculaView::setMensajeEstado(){
     // Si el proyecto NO ha sido iniciado o está en letargo, mandamos el texto de bloqueo
     if (!m_modoLienzo.estaIniciado) {
@@ -631,9 +645,244 @@ void MoleculaView::setMensajeEstado(){
     }
 }
 
+QString MoleculaView::loadFileVisMol(const QString& ruta){
+    if (ruta.isEmpty()) return "Debes especificar un archivo para cargar los datos.";
+
+    // 1. CREAMOS CONTENEDORES TEMPORALES (Si la carga falla, la molécula actual se salva)
+    QVector<Atomo>  listaAtomosTemporal;
+    QVector<Enlace> listaEnlacesTemporal;
+    QString         comentarioTemporal;
+
+    // 2. Invocamos al parseador pasándole las referencias temporales
+    QString error = DatosIO::loadVisMol(ruta, listaAtomosTemporal, listaEnlacesTemporal, comentarioTemporal);
+
+    // 3. EN CASO DE ERROR, ABORTAMOS INMEDIATAMENTE (Sin tocar la memoria de la clase)
+    if (!error.isEmpty()) {
+        return error;
+    }
+
+    // 4. SI LA CARGA FUE UN ÉXITO ABSOLUTO, RESPALDAMOS Y ACTUALIZAMOS LA APLICACIÓN
+    resetVariablesClase(); // Ahora sí, limpiamos con total seguridad
+
+    // Volcamos las estructuras temporales a las variables oficiales de la clase
+    m_listaAtomos  = listaAtomosTemporal;
+    m_listaEnlaces = listaEnlacesTemporal;
+    m_comentario   = comentarioTemporal;
+
+    // Sincronizar el contador interno de IDs buscando el valor más alto cargado
+    int maxId = -1;
+    for (const Atomo& atomo : m_listaAtomos) {
+        if (atomo.id > maxId) {
+            maxId = atomo.id;
+        }
+    }
+    m_contadorIds = maxId;
+
+    // Limpieza profunda del historial al cerrar, limpiar o cambiar de lienzo
+    m_atras.clear();
+    m_adelante.clear();
+
+    // Forzamos el refresco completo de la salud del documento y los widgets de interfaz
+    ModoLienzo modo;
+    modo.estaVacio     = m_listaAtomos.isEmpty();
+    modo.estaGuardado  = true; // Sincronizado con el disco recién abierto
+    modo.estaIniciado  = true; // Enciende las barras de herramientas
+
+    setModoLienzo(modo);
+
+    return ""; // Éxito total
+}
+
+QString MoleculaView::loadFileMOPAC(const QString& ruta){
+    if (ruta.isEmpty()) return "Debes especificar una ruta de archivo de salida de MOPAC válida.";
+
+    // =========================================================================
+    // 1. CARGA DE COORDENADAS CUÁNTICAS DESDE EL .OUT (PROCESAMIENTO LIMPIO)
+    // =========================================================================
+    QVector<Atomo>  listaAtomosOptimizada;
+    QString         comentarioTemporal;
+    QString         argumentosTemporal;
+
+    QString error = DatosIO::loadMOPAC(ruta, listaAtomosOptimizada, comentarioTemporal, argumentosTemporal);
+    if (!error.isEmpty()) {
+        return error; // Aborto inmediato: El archivo .out está corrupto o incompleto
+    }
+
+    // Una vez garantizado que el .out es válido, alteramos la memoria de forma segura
+    pushAtras();
+
+    // =========================================================================
+    // 2. SISTEMA DE RECUPERACIÓN TOPOLÓGICA ESPEJO (.vismol)
+    // =========================================================================
+    QFileInfo info(ruta);
+    QString rutaEspejoVismol = info.absolutePath() + "/" + info.baseName() + ".vismol";
+
+    QVector<Atomo>  listaAtomosEspejo;
+    QVector<Enlace> listaEnlacesEspejo;
+    QString         comentarioEspejo;
+
+    QString errorEspejo = DatosIO::loadVisMol(rutaEspejoVismol, listaAtomosEspejo, listaEnlacesEspejo, comentarioEspejo);
+    QString tokenResultado = "";
+
+    if (errorEspejo.isEmpty() && listaAtomosEspejo.size() == listaAtomosOptimizada.size()) {
+        // CASO A: Sincronización molecular perfecta (Geometría cuántica + Enlaces)
+        m_listaEnlaces = listaEnlacesEspejo;
+        m_listaAtomos  = listaAtomosEspejo;
+
+        for (int i = 0; i < m_listaAtomos.size(); ++i) {
+            m_listaAtomos[i].posicion = listaAtomosOptimizada[i].posicion;
+        }
+        m_comentario = "Geometría Optimizada de MOPAC + Enlaces de Respaldo";
+    }
+    else {
+        // CASO B: Carga desnuda controlada (Aviso a la interfaz de usuario)
+        m_listaAtomos = listaAtomosOptimizada;
+        m_listaEnlaces.clear();
+        m_comentario  = comentarioTemporal;
+
+        tokenResultado = "AVISO_TOPOLOGIA"; // Token semántico para la Vista
+    }
+
+    // =========================================================================
+    // 3. SINCRONIZACIÓN CENTRALIZADA DE IDS Y EMISIÓN HÁPTICA DEL LIENZO
+    // =========================================================================
+    int maxId = 0;
+    for (const Atomo& atomo : m_listaAtomos) {
+        if (atomo.id > maxId) {
+            maxId = atomo.id;
+        }
+    }
+    m_contadorIds = maxId;
+
+    ModoLienzo modo;
+    modo.estaVacio    = m_listaAtomos.isEmpty();
+    modo.estaGuardado = false;
+    modo.estaIniciado = true;
+
+    setModoLienzo(modo);
+
+    return tokenResultado; // Retorno limpio de estado
+}
+
+
+QString MoleculaView::saveFileVisMol(const QString& ruta){
+    // Control de seguridad inicial para evitar rutas vacías
+    if (ruta.isEmpty()) return "Debes especificar unja archivo para guardar los datos.";
+
+    return DatosIO::saveVisMol(ruta, m_listaAtomos, m_listaEnlaces, m_comentario);
+}
+
+QString MoleculaView::saveFileMOPAC(const QString& ruta, const QString& argumentos){
+
+    if (ruta.isEmpty()) return "Debes especificar una ruta de archivo válida.";
+    if (argumentos.isEmpty()) return "MOPAC exige al menos una palabra clave (Keyword) en la primera línea de instrucciones.";
+
+    // =========================================================================
+    // 1. GENERACIÓN DEL ARCHIVO PRINCIPAL DE ENTRADA MOPAC (.dat / .mop)
+    // =========================================================================
+    QString errorMopac = DatosIO::saveMOPAC(ruta, m_listaAtomos, m_comentario, argumentos.trimmed().toUpper());
+
+    // Red de seguridad: Si falla la escritura física del .dat, abortamos el flujo
+    if (!errorMopac.isEmpty()) {
+        return errorMopac;
+    }
+
+    // =========================================================================
+    // 2. GENERACIÓN AUTOMÁTICA DEL ARCHIVO ESPEJO TOPOLÓGICO (.vismol)
+    // =========================================================================
+    QFileInfo info(ruta);
+    // Construimos la ruta simétrica reemplazando la extensión en el mismo directorio
+    QString rutaEspejoVismol = info.absolutePath() + "/" + info.baseName() + ".vismol";
+
+    // Guardamos el estado estructural actual (átomos con sus IDs y enlaces limpios)
+    QString errorEspejo = DatosIO::saveVisMol(rutaEspejoVismol, m_listaAtomos, m_listaEnlaces, m_comentario);
+
+    // NOTA DE CONTROL: Si el espejo falla (ej. disco lleno a mitad de proceso),
+    // lo notificamos, pero no destruimos el aviso de que el .dat principal sí se creó.
+    if (!errorEspejo.isEmpty()) {
+        return "AVISO_RESPALDO_FALLIDO";
+    }
+
+    return ""; // Éxito absoluto en la persistencia del combo de archivos
+}
+
+QString MoleculaView::getTipoArchivo(const QString& ruta){
+    // Devolvemos .out, .arc, .vismol, .dat, .xyz
+    //
+    // si primera palabra es SUMMARY OF             -> .arc
+    // si existe  JOB ENDED NORMALLY y MOPAC DONE   -> .out
+    // si existe [ATOMOS] y [ENLACES]               -> vismol
+
+    if (ruta.isEmpty()) return "*.*";
+
+    QFile archivo(ruta);
+    if (!archivo.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return "*.*";
+    }
+
+    QTextStream entrada(&archivo);
+
+    // Variables de control basadas estrictamente en tus tokens
+    bool esMopacArc     = false;
+    bool tieneJobEnded  = false;
+    bool tieneMopacDone = false;
+    bool tieneAtomos    = false;
+    bool tieneEnlaces   = false;
+
+    int lineasLeidas = 0;
+
+    // REGLA 1: Evaluamos la primera línea del archivo de forma aislada
+    if (!entrada.atEnd()) {
+        QString primeraLinea = entrada.readLine().trimmed();
+        lineasLeidas++;
+
+        // Si empieza exactamente por la frase clave, es un .arc de cabeza
+        if (primeraLinea.startsWith("SUMMARY OF", Qt::CaseInsensitive)) {
+            esMopacArc = true;
+        }
+
+        // Evaluamos también las otras reglas por si fuera un archivo de una sola línea
+        if (primeraLinea.contains("JOB ENDED NORMALLY", Qt::CaseInsensitive)) tieneJobEnded = true;
+        if (primeraLinea.contains("MOPAC DONE", Qt::CaseInsensitive)) tieneMopacDone = true;
+        if (primeraLinea == "[ATOMOS]")  tieneAtomos = true;
+        if (primeraLinea == "[ENLACES]") tieneEnlaces = true;
+    }
+
+    // REGLA 2: Continuamos leyendo el resto del archivo para buscar los demás marcadores
+    // Acotado a 2000 líneas por eficiencia con archivos cuánticos masivos
+    while (!entrada.atEnd() && lineasLeidas < 2000) {
+        QString linea = entrada.readLine().trimmed();
+        lineasLeidas++;
+
+        if (linea.contains("JOB ENDED NORMALLY", Qt::CaseInsensitive)) {
+            tieneJobEnded = true;
+        }
+        if (linea.contains("MOPAC DONE", Qt::CaseInsensitive)) {
+            tieneMopacDone = true;
+        }
+        if (linea == "[ATOMOS]")  tieneAtomos = true;
+        if (linea == "[ENLACES]") tieneEnlaces = true;
+    }
+    archivo.close();
+
+    // =========================================================================
+    // MAQUINARIA DE DECISIÓN SEMÁNTICA (TUS REGLAS PURAS)
+    // =========================================================================
+    if (tieneAtomos && tieneEnlaces) {
+        return ".vismol";
+    }
+    if (tieneJobEnded || tieneMopacDone) {
+        return ".out";
+    }
+    if (esMopacArc) {
+        return ".arc";
+    }
+
+    return "*.*";
+}
 
 // =========================================================================
-// ZONA: VALIDACIONES Y AUXILIARES QUÍMICOS / MATEMÁTICOS
+// 11. ZONA: MÉTODOS INTERNOS PRIVADOS (VALIDACIONES Y AUXILIARES QUÍMICOS)
 // =========================================================================
 
 int MoleculaView::getIdAtomoFromPos(const QVector3D& posClick){
@@ -690,35 +939,8 @@ bool MoleculaView::isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2){
     // =========================================================================
     // 4. TABLA DE ENFRENTAMIENTO DIRECTO (COMPATIBILIDAD GEOMÉTRICA)
     // =========================================================================
-    QString s1 = atomo1.simbolo;
-    QString s2 = atomo2.simbolo;
-
-    // --- BLOQUE HIDRÓGENO (H) ---
-    if (s1 == "H" || s2 == "H") {
-        QString compañero = (s1 == "H") ? s2 : s1;
-        // El hidrógeno orgánico elemental solo se une a C, H, O o N
-        if (compañero != "C" && compañero != "H" && compañero != "O" && compañero != "N") {
-            return false;
-        }
-    }
-
-    // --- BLOQUE CARBONO (C) ---
-    if (s1 == "C" || s2 == "C") {
-        return true;
-    }
-
-    // --- BLOQUE OXÍGENO (O) ---
-    if (s1 == "O" && s2 == "O") {
-        return true;
-    }
-
-    // --- BLOQUE NITRÓGENO (N) ---
-    if ((s1 == "N" && s2 == "O") || (s1 == "O" && s2 == "N")) {
-        return true;
-    }
-    if (s1 == "N" && s2 == "N") {
-        return true;
-    }
+    bool isCompatible = Atomos::isCompatibles(atomo1.simbolo, atomo2.simbolo);
+    if(!isCompatible) return false;
 
     return true;
 }
@@ -751,3 +973,5 @@ float MoleculaView::getDistanciaPuntoSegmento(const QVector3D& punto, const QVec
     // Devolvemos la distancia real entre el clic y ese punto cercano
     return punto.distanceToPoint(puntoCercano);
 }
+
+
