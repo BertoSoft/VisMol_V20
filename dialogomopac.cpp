@@ -1,16 +1,19 @@
 #include "dialogomopac.h"
-#include "moleculavista.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
 #include <QGroupBox>
 
-DialogoMopac::DialogoMopac(MoleculaVista* vistaPrincipal, QWidget *parent)
-    : QDialog(parent), m_vista(vistaPrincipal)
-{
+DialogoMopac::DialogoMopac(QString& argumentos, QString& comentario, QWidget *parent)
+    : QDialog(parent), m_argumentos(&argumentos), m_comentario(&comentario){
+
     // Eliminamos cualquier referencia a ui->setupUi(this) ya que diseñamos a mano
     initUi();
+
+    if(!m_comentario->isEmpty()){
+        m_txtComentario->setText(*m_comentario);
+    }
 }
 
 DialogoMopac::~DialogoMopac() {
@@ -19,7 +22,7 @@ DialogoMopac::~DialogoMopac() {
 
 void DialogoMopac::initUi() {
     setWindowTitle(tr("Configuración de Optimización y Modelado"));
-    setMinimumWidth(420);
+    setMinimumWidth(600);
 
     QVBoxLayout* layoutPrincipal = new QVBoxLayout(this);
 
@@ -74,6 +77,8 @@ void DialogoMopac::initUi() {
     connect(m_btnExportar, &QPushButton::clicked, this, &DialogoMopac::alExportarEntrada);
     connect(m_btnLanzar,   &QPushButton::clicked, this, &DialogoMopac::alLanzarSimulacion);
     connect(m_btnCancelar, &QPushButton::clicked, this, &DialogoMopac::reject);
+
+    setEstilos();
 }
 
 QString DialogoMopac::construirKeywords() {
@@ -90,9 +95,36 @@ QString DialogoMopac::construirKeywords() {
     return cmdKeywords.trimmed().toUpper();
 }
 
+void DialogoMopac::setEstilos(){
+    // 1. Asignamos un identificador único al QLineEdit para aplicar el CSS
+    m_txtComentario->setObjectName("txtComentarioResaltado");
+
+    // 2. Definimos la plantilla CSS con fondo gris claro y texto azul
+    QString estiloComentario =
+        "QLineEdit#txtComentarioResaltado {"
+        "   background-color: #f2f2f2;"  /* Fondo gris claro */
+        "   color: #0033cc;"             /* Texto azul */
+        "   border: 1px solid #a0a0a0;"  /* Borde gris para definir el contorno */
+        "   border-radius: 4px;"         /* Bordes ligeramente redondeados */
+        "   padding: 6px;"               /* Espacio interno para que no quede pegado */
+        "   font-weight: bold;"          /* Texto en negrita para resaltar */
+        "}"
+        "QLineEdit#txtComentarioResaltado:focus {"
+        "   background-color: #e6e6e6;"  /* Fondo gris un poco más oscuro al hacer clic */
+        "   border: 1px solid #0033cc;"  /* El borde se vuelve azul al escribir */
+        "}";
+
+    // 3. Aplicamos el estilo únicamente al componente de comentario
+    m_txtComentario->setStyleSheet(estiloComentario);
+}
+
 void DialogoMopac::alExportarEntrada() {
     // LO QUE VENDRÁ: Aquí dentro le notificaremos a m_vista que el usuario quiere exportar,
     // pasándole las Keywords calculadas por 'construirKeywords()' y el texto del comentario.
+    *m_argumentos = construirKeywords();
+    *m_comentario = m_txtComentario->text().trimmed();
+
+    this->done(1); // 1 significa que el usuario quiere EXPORTAR
 }
 
 void DialogoMopac::alLanzarSimulacion() {

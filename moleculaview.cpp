@@ -65,6 +65,10 @@ void MoleculaView::setComentario(const QString& comentario){
     m_comentario = comentario.trimmed();
 }
 
+void MoleculaView::setArgumentos(const QString& argumentos){
+    m_argumentos = argumentos;
+}
+
 void MoleculaView::setNuevoProyecto(){
     limpiarLienzo();
 
@@ -161,20 +165,50 @@ QString MoleculaView::guardarArchivo(const QString& ruta){
         return tr("La ruta de destino especificada está vacía.");
     }
 
-    // 1. EJECUCIÓN DIRECTA DE LA ESCRITURA EN FORMATO NATIVO
-    // Toda la lógica cuántica o de otros motores queda desterrada del flujo general
-    QString errorEscribir = DatosIO::saveVisMol(ruta, m_listaAtomos, m_listaEnlaces, m_comentario);
+    // 1. INTENTO DE DETECCIÓN INTELIGENTE POR CONTENIDO REAL
+    QString formatoDeteccion = getTipoArchivo(ruta);
+
+    // 2. RED DE SEGURIDAD: SI ES NUEVO O ESTÁ VACÍO (*.*), DISCRIMINAMOS POR EXTENSIÓN
+    if (formatoDeteccion == "*.*") {
+        QFileInfo info(ruta);
+        QString extension = info.suffix().toLower();
+
+        if (extension == "vismol") {
+            formatoDeteccion = ".vismol";
+        }
+        else if (extension == "dat" || extension == "mop" || extension == "out") {
+            formatoDeteccion = ".dat"; // Identificador para el bloque de MOPAC
+        }
+    }
+
+    // 3. ENRUTAMIENTO CENTRALIZADO Y EXCLUSIVO
+    QString errorEscribir = "";
+
+    if (formatoDeteccion == ".vismol") {
+        // Formato nativo puro
+        errorEscribir = DatosIO::saveVisMol(ruta, m_listaAtomos, m_listaEnlaces, m_comentario);
+    }
+    else if (formatoDeteccion == ".dat" || formatoDeteccion == ".out") {
+        // Archivos cuánticos y sus sobreescrituras: van DIRECTOS al motor MOPAC
+        if (m_argumentos.isEmpty()) {
+            return tr("MOPAC exige al menos una palabra clave (Keyword) para poder guardar el archivo.");
+        }
+        // Llama a tu método de la ZONA 10, que se encarga de empaquetar el .dat/.mop
+        errorEscribir = saveFileMOPAC(ruta, m_argumentos);
+    }
+    else {
+        return tr("El formato o la extensión del archivo no son reconocidos por el sistema para su guardado.");
+    }
 
     // =========================================================================
-    // 2. SEÑALIZACIÓN TRANSACCIONAL DE ÉXITO (MEMORIA Y ASTERISCO)
+    // 4. SEÑALIZACIÓN TRANSACCIONAL DE ÉXITO (MEMORIA Y ASTERISCO)
     // =========================================================================
-    if (errorEscribir.isEmpty()) {
-        m_rutaArchivoActual = ruta.trimmed(); // El cerebro memoriza la ruta real limpia
+    if (errorEscribir.isEmpty() || errorEscribir == "AVISO_RESPALDO_FALLIDO") {
+        m_rutaArchivoActual = ruta.trimmed();
 
         m_modoLienzo.estaGuardado = true;
         m_modoLienzo.estaVacio    = m_listaAtomos.isEmpty();
 
-        // Emitimos la señal para que MoleculaVista borre el asterisco (*) del título
         emit modoLienzoCambiado(m_modoLienzo);
     }
 
@@ -516,7 +550,8 @@ void MoleculaView::resetVariablesClase(){
     // 1. Vaciar contenedores físicos de memoria
     m_listaAtomos.clear();
     m_listaEnlaces.clear();
-    m_comentario = "";
+    m_comentario        = "";
+    m_argumentos        = "";
     m_rutaArchivoActual = "";
 
     // 2. Valores numéricos y de control de fábrica

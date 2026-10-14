@@ -16,7 +16,7 @@ class DialogoMopac : public QDialog
 
 public:
     // El constructor recibe obligatoriamente a MoleculaVista para poder comunicarse con ella
-    explicit DialogoMopac(MoleculaVista* vistaPrincipal, QWidget *parent = nullptr);
+    explicit DialogoMopac(QString& argumentos, QString& comentario, QWidget *parent = nullptr);
     ~DialogoMopac() override;
 
 private slots:
@@ -26,9 +26,11 @@ private slots:
 private:
     void initUi();
     QString construirKeywords(); // Ensambla los comandos cuánticos ("AM1 PRECISE", etc.)
+    void    setEstilos();
 
-    // Puente de comunicación exclusivo con tu ventana principal
-    MoleculaVista* m_vista = nullptr;
+    // Variables de clase que guardan comentario y argumentos
+    QString*    m_comentario = nullptr;
+    QString*    m_argumentos = nullptr;
 
     // Componentes de configuración de Keywords generados estrictamente por código
     QComboBox*   m_comboMetodo    = nullptr;

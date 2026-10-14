@@ -70,7 +70,7 @@ QString MoleculaVista::dialogoAbrirArchivo(){
         this,
         tr("Abrir Proyecto VisMol"),
         "",
-        tr("Archivos de MOPAC / VisMol / XYZ (*.dat *.vismol *.xyz)")
+        tr("Archivos de MOPAC / VisMol / XYZ (*.dat *.out *.vismol *.xyz)")
         );
 }
 
@@ -669,11 +669,32 @@ void MoleculaVista::configurarMopac(){
     if (!m_view) return;
 
     // 1. Instanciamos la ventana por código pasándole "this" (esta misma vista) como jefa y padre visual
-    DialogoMopac dialogo(this, this);
+    QString comentario;
+    QString argumentos;
+
+    DialogoMopac dialogo(argumentos, comentario, this);
 
     // 2. Bloqueamos la interfaz principal y mostramos el diálogo en modo modal
     // exec() se queda esperando pacientemente en silencio a que el usuario pulse "Exportar", "Lanzar" o "Cancelar"
-    dialogo.exec();
+    int resultado = dialogo.exec();
+
+    if(resultado == QDialog::Rejected) return;
+
+    if(resultado == 1 ){
+        // exportar
+        QString ruta = dialogoGuardarArchivo(".dat");
+
+        if(m_view){
+            m_view->setComentario(comentario);
+            m_view->setArgumentos(argumentos);
+            m_view->guardarArchivo(ruta);
+        }
+    }
+    else if(resultado == 2){
+        // Lamzar simulacion
+    }
+
+
 }
 
 void MoleculaVista::mostrarFrecuencias(){}

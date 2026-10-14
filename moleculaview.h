@@ -54,6 +54,7 @@ public:
     void        setModoEditor(const ModoEditor& nuevoModo);
     void        setElementoActivo(const QString& simbolo);
     void        setComentario(const QString& comentario);
+    void        setArgumentos(const QString& argumentos);
     void        setNuevoProyecto();
     void        deshacer();
     void        rehacer();
@@ -167,6 +168,7 @@ private:
     QVector<Atomo>          m_listaAtomos;
     QVector<Enlace>         m_listaEnlaces;
     QString                 m_comentario;
+    QString                 m_argumentos;
     QString                 m_rutaArchivoActual;
 
     int                     m_contadorIds         = 0;
