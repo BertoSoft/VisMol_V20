@@ -16,6 +16,9 @@ public:
     static QString saveMOPAC(const QString& ruta, const QVector<Atomo>& m_listaAtomos,  const QString& comentario, const QString& argumentos);
     static QString loadMOPAC(const QString& ruta, QVector<Atomo>& m_listaAtomos, QString& comentario, QString& argumentos);
 
+private:
+    // FACTOR DE ESCALA CRÍTICO: 100 píxeles de pantalla equivalen a 1.0 Ångstrom real
+    static constexpr float FACTOR_ANGSTROM = 100.0f;
 };
 
 #endif // DATOSIO_H

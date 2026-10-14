@@ -144,7 +144,10 @@ QString MoleculaView::abrirArchivo(const QString& ruta){
         // Dejamos el gancho semántico listo para cuando programes este lector
         respuesta =  tr("Archivo de resumen (.arc) detectado. El lector para este formato se encuentra en desarrollo.");
     }
-
+    if (formatoDeteccion == ".dat") {
+        // Dejamos el gancho semántico listo para cuando programes este lector
+        respuesta = loadFileMOPAC(ruta); // Tu motor de procesamiento cuántico
+    }
     if(formatoDeteccion == "*.*"){
         // 3. Si devuelve "*.*" o un formato desconocido, abortamos con un mensaje elegante
         return tr("El archivo seleccionado no contiene ninguna firma molecular o formato reconocido por el sistema.");
@@ -863,6 +866,8 @@ QString MoleculaView::getTipoArchivo(const QString& ruta){
     bool tieneMopacDone = false;
     bool tieneAtomos    = false;
     bool tieneEnlaces   = false;
+    bool linea3Vacia    = false;
+    bool linea4Vacia    = false;
 
     int lineasLeidas = 0;
 
@@ -897,6 +902,8 @@ QString MoleculaView::getTipoArchivo(const QString& ruta){
         }
         if (linea == "[ATOMOS]")  tieneAtomos = true;
         if (linea == "[ENLACES]") tieneEnlaces = true;
+        if(lineasLeidas == 3 && linea.isEmpty()) linea3Vacia = true;
+        if(lineasLeidas == 4 && linea.isEmpty()) linea4Vacia = true;
     }
     archivo.close();
 
@@ -911,6 +918,9 @@ QString MoleculaView::getTipoArchivo(const QString& ruta){
     }
     if (esMopacArc) {
         return ".arc";
+    }
+    if(linea3Vacia && !linea4Vacia){
+        return ".dat";
     }
 
     return "*.*";

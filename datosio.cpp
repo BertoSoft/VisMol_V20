@@ -160,37 +160,35 @@ QString DatosIO::saveMOPAC(const QString& ruta, const QVector<Atomo>& m_listaAto
 
     QTextStream salida(&archivo);
 
-    // =========================================================================
-    // 1. ESTRUCTURA DE CABECERA EXIGIDA POR MOPAC
-    // =========================================================================
-    // Línea 1: Las instrucciones cuánticas (Keywords) limpias y en mayúsculas
+    // Cabecera estricta del archivo de entrada MOPAC
     salida << argumentos.trimmed().toUpper() << "\n";
 
-    // Línea 2: El título o comentario identificador de la molécula
     if (comentario.isEmpty()) {
         salida << "Molecula generada con VisorMol_V20\n";
     } else {
         salida << comentario << "\n";
     }
-
-    // Línea 3: Línea en blanco OBLIGATORIA (Delimitador físico para el código de MOPAC)
     salida << "\n";
 
-    // =========================================================================
-    // 2. BLOQUE GEOMÉTRICO (COORDENADAS CARTESIANAS + FLAGS '1')
-    // =========================================================================
+    // Escritura de la matriz geométrica aplicando escalado saliente
     for (const Atomo& atomo : m_listaAtomos) {
-        // Formato estándar MOPAC: Símbolo \t X 1 \t Y 1 \t Z 1
-        // qSetRealNumberPrecision(6) garantiza la máxima exactitud para matrices de energía cuántica
+
+        // !!! AQUÍ SE APLICA EL ESCALADO EXPORTAR (Píxeles -> Ångstroms) !!!
+        // Dividimos las coordenadas espaciales entre 100.0 para que MOPAC las entienda
+        double xAngstrom = atomo.posicion.x() / FACTOR_ANGSTROM;
+        double yAngstrom = atomo.posicion.y() / FACTOR_ANGSTROM;
+        double zAngstrom = atomo.posicion.z() / FACTOR_ANGSTROM;
+
+        // Formato Cartesiano MOPAC: Símbolo \t X 1 \t Y 1 \t Z 1
         salida << atomo.simbolo << "\t"
                << qSetRealNumberPrecision(6) << Qt::fixed
-               << atomo.posicion.x() << " 1\t"
-               << atomo.posicion.y() << " 1\t"
-               << atomo.posicion.z() << " 1\n";
+               << xAngstrom << " 1\t"
+               << yAngstrom << " 1\t"
+               << zAngstrom << " 1\n";
     }
 
     archivo.close();
-    return ""; // Retornar una cadena vacía indica éxito absoluto en la escritura física
+    return "";
 }
 
 QString DatosIO::loadMOPAC(const QString& ruta, QVector<Atomo>& m_listaAtomos, QString& comentario, QString& argumentos){
@@ -202,18 +200,16 @@ QString DatosIO::loadMOPAC(const QString& ruta, QVector<Atomo>& m_listaAtomos, Q
     QTextStream entrada(&archivo);
     QStringList todasLasLineas;
 
-    // 1. Volcamos todo el mar de texto en memoria para poder viajar en el tiempo hacia atrás
     while (!entrada.atEnd()) {
         todasLasLineas.append(entrada.readLine());
     }
     archivo.close();
 
-    // Limpieza preventiva de las estructuras del lienzo
     m_listaAtomos.clear();
     comentario = "Geometría Final Optimizada (MOPAC)";
     argumentos = "";
 
-    // 2. RASTREO FASE A: Buscamos el cartel de fin de trabajo desde el fondo del archivo
+    // Localizar el final normal de la simulación cuántica
     int indiceJobEnded = -1;
     for (int i = todasLasLineas.size() - 1; i >= 0; --i) {
         if (todasLasLineas[i].contains("JOB ENDED NORMALLY")) {
@@ -226,7 +222,7 @@ QString DatosIO::loadMOPAC(const QString& ruta, QVector<Atomo>& m_listaAtomos, Q
         return "Error: El cálculo de MOPAC no terminó correctamente (No se encontró 'JOB ENDED NORMALLY').";
     }
 
-    // 3. RASTREO FASE B: Desde ese cartel, subimos hacia atrás buscando las coordenadas finales
+    // Rastrear la última matriz de coordenadas cartesianas optimizadas
     int indiceCartesian = -1;
     for (int i = indiceJobEnded; i >= 0; --i) {
         if (todasLasLineas[i].contains("CARTESIAN COORDINATES")) {
@@ -239,45 +235,48 @@ QString DatosIO::loadMOPAC(const QString& ruta, QVector<Atomo>& m_listaAtomos, Q
         return "Error: No se encontró ningún bloque de 'CARTESIAN COORDINATES' previo a la finalización del trabajo.";
     }
 
-    // 4. EXTRACCIÓN DE DATOS: Volvemos a leer hacia adelante a partir de la cabecera encontrada
+    // Avanzar hasta la primera fila de datos numéricos puros
     int idContador = 1;
     QRegularExpression separadorEspacios("\\s+");
-
-    // Saltamos la línea del título "CARTESIAN COORDINATES" y las cabeceras vacías/decorativas
     int inicioBloqueAtomos = indiceCartesian + 1;
+
     while (inicioBloqueAtomos < todasLasLineas.size()) {
         QString lineaLimpia = todasLasLineas[inicioBloqueAtomos].trimmed();
-        // Si la línea contiene números de columna o está en blanco, seguimos bajando hasta los átomos reales
         if (lineaLimpia.isEmpty() || lineaLimpia.contains("NO.") || lineaLimpia.contains("ATOM")) {
             inicioBloqueAtomos++;
         } else {
-            break; // Hemos llegado al primer átomo real
+            break;
         }
     }
 
-    // Procesamos la tabla línea a línea en orden normal hasta encontrar el cierre (línea vacía)
+    // Parseo y procesamiento de la geometría optimizada
     for (int i = inicioBloqueAtomos; i < todasLasLineas.size(); ++i) {
         QString lineaAtomo = todasLasLineas[i].trimmed();
 
-        // MOPAC cierra la tabla de coordenadas con una línea en blanco
+        // MOPAC rompe la tabla de coordenadas al detectar una línea en blanco
         if (lineaAtomo.isEmpty()) {
             break;
         }
 
         QStringList columnas = lineaAtomo.split(separadorEspacios);
 
-        // Formato esperado de la fila: "1   C   -500.0000   -54.0000   0.0000"
         if (columnas.size() >= 5) {
             Atomo atomo;
             atomo.id      = idContador++;
-            atomo.simbolo = columnas[1].trimmed(); // Columna 2: Símbolo químico
+            atomo.simbolo = columnas[1].trimmed();
 
-            // Extraemos las nuevas posiciones tridimensionales moleculares
-            float x = columnas[2].toFloat();
-            float y = columnas[3].toFloat();
-            float z = columnas[4].toFloat();
-            atomo.posicion = QVector3D(x, y, z);
+            // Extraemos los Ångstroms reales calculados por el motor cuántico
+            float xMopac = columnas[2].toFloat();
+            float yMopac = columnas[3].toFloat();
+            float zMopac = columnas[4].toFloat();
 
+            // !!! AQUÍ SE APLICA EL ESCALADO ENTRADA (Ångstroms -> Píxeles) !!!
+            // Multiplicamos por 100.0f para recuperar el tamaño óptimo de visualización en la interfaz
+            float xPantalla = xMopac * FACTOR_ANGSTROM;
+            float yPantalla = yMopac * FACTOR_ANGSTROM;
+            float zPantalla = zMopac * FACTOR_ANGSTROM;
+
+            atomo.posicion = QVector3D(xPantalla, yPantalla, zPantalla);
             m_listaAtomos.append(atomo);
         }
     }
@@ -286,5 +285,5 @@ QString DatosIO::loadMOPAC(const QString& ruta, QVector<Atomo>& m_listaAtomos, Q
         return "Error: El bloque 'CARTESIAN COORDINATES' estaba vacío o corrupto.";
     }
 
-    return ""; // ¡Éxito absoluto!
+    return "";
 }
