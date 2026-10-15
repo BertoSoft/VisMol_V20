@@ -1,6 +1,8 @@
 #include "moleculalienzo.h"
 #include "moleculaview.h"
 #include "atomos.h"
+#include "moleculamat.h"
+
 
 #include <QObject>
 #include <QMouseEvent>
@@ -17,12 +19,6 @@ MoleculaLienzo::MoleculaLienzo(QWidget* parent)
 
     m_escena = new QGraphicsScene(this);
 
-    // =========================================================================
-    // CONFIGURACIÓN DE ESCALA CIENTÍFICA (1 Unidad = 1 Ángstrom)
-    // Definimos un lienzo de 1000x1000 Å con el origen (0,0) en el centro
-    // =========================================================================
-    m_escena->setSceneRect(-500, -500, 1000, 1000);
-
     this->setScene(m_escena);
 
     // Opciones estéticas profesionales para un renderizado de átomos nítido
@@ -32,11 +28,16 @@ MoleculaLienzo::MoleculaLienzo(QWidget* parent)
     this->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     this->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
+    // Inicialización explícita de seguridad
+    m_anguloX = 0.0f;
+    m_anguloY = 0.0f;
+
+    this->setMouseTracking(true); // Fuerza a la vista a escuchar el ratón continuamente
+    this->setDragMode(QGraphicsView::NoDrag); // Evita que Qt intente mover scrolls invisibles al arrastrar
 
 }
 
 MoleculaLienzo::~MoleculaLienzo(){
-
 }
 
 //###########################################################################################
@@ -49,6 +50,17 @@ void MoleculaLienzo::setMoleculaView(MoleculaView* view){
     m_view = view;
 }
 
+void MoleculaLienzo::resetearVistaFrontal() {
+    m_anguloX = 0.0f;
+    m_anguloY = 0.0f;
+    actualizarLienzo(); // Pinta la escena de frente con los datos reales en RAM de m_view
+    // =========================================================================
+    // ─── ¡SOLUCIÓN!: CALIBRACIÓN E INYECCIÓN DE FOCO INSTANTÁNEA PARA EL RATÓN ───
+    // =========================================================================
+    this->updateSceneRect(m_escena->itemsBoundingRect()); // Fuerza a la escena a recalcular sus fronteras reales ya aplanadas
+    this->setFocus(); // Obliga al widget a tomar el foco activo del sistema operativo, reseteando la caché del cursor
+}
+
 void MoleculaLienzo::actualizarLienzo(){
     if(!m_view) return;
 
@@ -58,14 +70,12 @@ void MoleculaLienzo::actualizarLienzo(){
     m_escena->clear();
 
     // =========================================================================
-    // 1. RENDERIZAMOS LOS ENLACES (LÍNEAS)
+    // 1. RENDERIZAMOS LOS ENLACES (LÍNEAS CON ROTACIÓN SELECCIONADA)
     // ==========================================================================
-    // Un gris claro suave (#D1D5DB) es mucho menos agresivo que el blanco puro sobre fondo oscuro
     QPen penEnlaces(QColor("#D1D5DB"));
     penEnlaces.setWidthF(3.0f);
     penEnlaces.setCapStyle(Qt::RoundCap);
 
-    // Distancia de separación física en píxeles/unidades entre las líneas paralelas
     const qreal offsetDist = 8.0;
 
     for(const Enlace &enlace: listaEnlaces){
@@ -88,122 +98,103 @@ void MoleculaLienzo::actualizarLienzo(){
             }
         }
         if(origenEncontrado && destinoEncontrado){
-            // Coordenadas base
-            qreal x1 = posOrigen.x();
-            qreal y1 = posOrigen.y();
-            qreal x2 = posDestino.x();
-            qreal y2 = posDestino.y();
+            // ¡MÁGICO!: Calculamos los extremos del enlace usando tu clase matemática
+            QPointF p1 = MoleculaMat::rotarPunto(posOrigen, m_anguloX, m_anguloY);
+            QPointF p2 = MoleculaMat::rotarPunto(posDestino, m_anguloX, m_anguloY);
 
-            // Calculamos el vector de dirección del enlace (Dx, Dy)
-            qreal dx = x2 - x1;
-            qreal dy = y2 - y1;
+            // Calculamos el vector de dirección basándonos en los nuevos puntos rotados
+            qreal dx = p2.x() - p1.x();
+            qreal dy = p2.y() - p1.y();
             qreal longitud = qSqrt(dx * dx + dy * dy);
 
-            // Evitamos divisiones por cero si los átomos están superpuestos
             if (longitud < 0.001) continue;
 
-            // Vector unitario perpendicular (Normalizado)
+            // Vector unitario perpendicular adaptado al giro de la pantalla
             qreal px = -dy / longitud;
             qreal py = dx / longitud;
 
-            // Dibujamos según el orden del enlace químico
+            // Dibujamos utilizando p1 y p2 corregidos por el hardware/QSS matemático
             if (enlace.orden == 1) {
-                // --- Enlace Simple: Una única línea central ---
-                QGraphicsLineItem* linea = m_escena->addLine(x1, y1, x2, y2, penEnlaces);
-                linea->setZValue(0);
+                m_escena->addLine(p1.x(), p1.y(), p2.x(), p2.y(), penEnlaces)->setZValue(0);
             }
             else if (enlace.orden == 2) {
-                // --- Enlace Doble: Dos líneas desplazadas simétricamente a los lados ---
                 qreal ox = px * (offsetDist / 2.0);
                 qreal oy = py * (offsetDist / 2.0);
 
-                QGraphicsLineItem* l1 = m_escena->addLine(x1 + ox, y1 + oy, x2 + ox, y2 + oy, penEnlaces);
-                QGraphicsLineItem* l2 = m_escena->addLine(x1 - ox, y1 - oy, x2 - ox, y2 - oy, penEnlaces);
-                l1->setZValue(0);
-                l2->setZValue(0);
+                m_escena->addLine(p1.x() + ox, p1.y() + oy, p2.x() + ox, p2.y() + oy, penEnlaces)->setZValue(0);
+                m_escena->addLine(p1.x() - ox, p1.y() - oy, p2.x() - ox, p2.y() - oy, penEnlaces)->setZValue(0);
             }
             else if (enlace.orden >= 3) {
-                // --- Enlace Triple: Una línea central y dos líneas a los extremos exteriores ---
                 qreal ox = px * offsetDist;
                 qreal oy = py * offsetDist;
 
-                QGraphicsLineItem* l_centro = m_escena->addLine(x1, y1, x2, y2, penEnlaces);
-                QGraphicsLineItem* l_izq    = m_escena->addLine(x1 + ox, y1 + oy, x2 + ox, y2 + oy, penEnlaces);
-                QGraphicsLineItem* l_der    = m_escena->addLine(x1 - ox, y1 - oy, x2 - ox, y2 - oy, penEnlaces);
-                l_centro->setZValue(0);
-                l_izq->setZValue(0);
-                l_der->setZValue(0);
+                m_escena->addLine(p1.x(), p1.y(), p2.x(), p2.y(), penEnlaces)->setZValue(0);
+                m_escena->addLine(p1.x() + ox, p1.y() + oy, p2.x() + ox, p2.y() + oy, penEnlaces)->setZValue(0);
+                m_escena->addLine(p1.x() - ox, p1.y() - oy, p2.x() - ox, p2.y() - oy, penEnlaces)->setZValue(0);
             }
         }
     }
 
     // =========================================================================
-    // 2. RENDERIZAMOS LOS ATOMOS (ELIPSES Y CONTRASTE DE TEXTO)
+    // 2. RENDERIZAMOS LOS ATOMOS (ELIPSES ROTADAS Y CONTRASTE DE TEXTO)
     // ==========================================================================
-
     for(const Atomo &atomo: listaAtomos){
         qreal   radio   = Atomos::getRadio(atomo.simbolo);
         QColor  color   = Atomos::getColor(atomo.simbolo);
 
-        qreal x         = atomo.posicion.x() - radio;
-        qreal y         = atomo.posicion.y() - radio;
+        // ¡MÁGICO!: Proyectamos el centro del átomo aplicando los ángulos de la vista
+        QPointF posRotada = MoleculaMat::rotarPunto(atomo.posicion, m_anguloX, m_anguloY);
+
+        qreal x         = posRotada.x() - radio;
+        qreal y         = posRotada.y() - radio;
         qreal diametro  = radio * 2.0f;
 
-        QGraphicsEllipseItem* elipse = m_escena->addEllipse(
-            x,
-            y,
-            diametro,
-            diametro
-            );
-
+        QGraphicsEllipseItem* elipse = m_escena->addEllipse(x, y, diametro, diametro);
         elipse->setBrush(QColor(color));
-
-        // Bordes oscuros muy sutiles pero definidos para separar el átomo de los enlaces traseros
         elipse->setPen(QPen(QColor("#1F2937"), 1.5f));
         elipse->setZValue(1);
 
-        // =========================================================================
-        // ¡NUEVO!: FEEDBACK VISUAL DE ÁTOMO SELECCIONADO (ANILLO CELESTE)
-        // =========================================================================
+        // Feedback visual adaptado a la coordenada rotada del átomo
         if (m_view && m_view->getIdAtomoSeleccionado() == atomo.id) {
-            qreal radioAnillo = radio + 6.0; // 6 unidades más grande para que rodee el átomo
-            qreal xAnillo = atomo.posicion.x() - radioAnillo;
-            qreal yAnillo = atomo.posicion.y() - radioAnillo;
+            qreal radioAnillo = radio + 6.0;
+            qreal xAnillo = posRotada.x() - radioAnillo;
+            qreal yAnillo = posRotada.y() - radioAnillo;
             qreal diametroAnillo = radioAnillo * 2.0;
 
             QGraphicsEllipseItem* anilloSel = m_escena->addEllipse(xAnillo, yAnillo, diametroAnillo, diametroAnillo);
 
-            // Configuración estética: Azul celeste vibrante (#38BDF8) y estilo punteado
             QPen penSel(QColor("#38BDF8"));
             penSel.setWidthF(2.5f);
-            penSel.setStyle(Qt::DashLine); // Línea discontinua/punteada muy tecnológica
+            penSel.setStyle(Qt::DashLine);
 
             anilloSel->setPen(penSel);
-            anilloSel->setBrush(Qt::NoBrush); // Interior transparente para que se vea el átomo
-            anilloSel->setZValue(3); // Capa superior para que brille por encima de todo
+            anilloSel->setBrush(Qt::NoBrush);
+            anilloSel->setZValue(3);
         }
 
-        // Renderizado del Símbolo Químico con tipografía unificada y limpia
+        // Renderizado del Símbolo Químico en concordancia con el centro proyectado
         QGraphicsSimpleTextItem* texto = m_escena->addSimpleText(atomo.simbolo);
 
         QFont fuenteApp("Segoe UI", 12, QFont::Bold);
         fuenteApp.setStyleHint(QFont::SansSerif);
         texto->setFont(fuenteApp);
 
-        // Control dinámico de legibilidad: texto negro para fondos muy claros (H, S, P, Halógenos), blanco para el resto
         if (Atomos::isTextoOscuro(atomo.simbolo)) {
-            texto->setBrush(QColor("#111827")); // Gris casi negro
+            texto->setBrush(QColor("#111827"));
         } else {
-            texto->setBrush(QColor("#FFFFFF")); // Blanco puro
+            texto->setBrush(QColor("#FFFFFF"));
         }
 
         QRectF contornoTexto = texto->boundingRect();
         texto->setPos(
-            atomo.posicion.x() - (contornoTexto.width() / 2),
-            atomo.posicion.y() - (contornoTexto.height() / 2)
+            posRotada.x() - (contornoTexto.width() / 2),
+            posRotada.y() - (contornoTexto.height() / 2)
             );
         texto->setZValue(2);
     }
+
+    // ─── ¡NUEVO!: Fuerza el refresco continuo del área gráfica al final del repintado ───
+    this->viewport()->update();
 }
 
 //##############################################################################################
@@ -211,38 +202,43 @@ void MoleculaLienzo::actualizarLienzo(){
 //#############################################################################################
 
 void MoleculaLienzo::mousePressEvent(QMouseEvent* mouseEv){
-    if(!m_view){
-        return;
+    if(!m_view) return;
+
+    m_ultimaPosRat = mouseEv->pos();
+
+    if(m_view->getModoEditor() != MoleculaView::ModoRotacion3D) {
+        if(mouseEv->button() == Qt::LeftButton){
+            QPointF posClick = this->mapToScene(mouseEv->pos());
+            m_view->setClick(QVector3D(posClick.x(), posClick.y(), 0.0f));
+        }
+        if(mouseEv->button() == Qt::RightButton){
+            QPointF posClickDerecho = this->mapToScene(mouseEv->pos());
+            m_view->setClickDerecho(QVector3D(posClickDerecho.x(), posClickDerecho.y(), 0.0f));
+        }
     }
-
-    if(mouseEv->button() == Qt::LeftButton){
-        QPointF     posClick = this->mapToScene(mouseEv->pos());
-        QVector3D   vector3D = QVector3D(posClick.x(), posClick.y(), 0.0f);
-
-        m_view->setClick(vector3D);
-    }
-
-    if(mouseEv->button() == Qt::RightButton){
-        QPointF     posClickDerecho = this->mapToScene(mouseEv->pos());
-        QVector3D   vector3D        = QVector3D(posClickDerecho.x(), posClickDerecho.y(), 0.0f);
-
-        m_view->setClickDerecho(vector3D);
-    }
-
     QGraphicsView::mousePressEvent(mouseEv);
 }
 
+void MoleculaLienzo::mouseMoveEvent(QMouseEvent* mouseEv) {
+    if(m_view && m_view->getModoEditor() == MoleculaView::ModoRotacion3D && (mouseEv->buttons() & Qt::LeftButton)) {
+        int deltaX = mouseEv->pos().x() - m_ultimaPosRat.x();
+        int deltaY = mouseEv->pos().y() - m_ultimaPosRat.y();
+
+        m_anguloY += deltaX * 0.5f;
+        m_anguloX += deltaY * 0.5f;
+
+        m_anguloX = qMax(-85.0f, qMin(85.0f, m_anguloX));
+        m_ultimaPosRat = mouseEv->pos();
+
+        actualizarLienzo();
+    } else {
+        QGraphicsView::mouseMoveEvent(mouseEv);
+    }
+}
+
 void MoleculaLienzo::resizeEvent(QResizeEvent* event){
-    // 1. Permitimos que QGraphicsView asimile las nuevas dimensiones del widget
     QGraphicsView::resizeEvent(event);
-
-    // 2. Limpiamos cualquier transformación de escala previa (Garantiza 1 Unidad = 1 Å)
     this->resetTransform();
-
-    // 3. Forzamos a la escena a recalcular y sincronizar sus dimensiones internas
-    // justo después del impacto del tamaño del dock
     m_escena->update();
-
     centerOn(0,0);
-
 }

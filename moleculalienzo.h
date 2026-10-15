@@ -17,16 +17,24 @@ public:
 
     void setMoleculaView(MoleculaView* view);
     void actualizarLienzo();
+    void resetearVistaFrontal();
 
 protected:
 
     void mousePressEvent(QMouseEvent* mouseEv) override;
+    void mouseMoveEvent(QMouseEvent* mouseEv) override; // <-- Captura el arrastre dinámico
     void resizeEvent(QResizeEvent* event) override;
 
 private:
     QGraphicsScene* m_escena = nullptr; // El espacio infinito donde se colocarán los gráficos
     MoleculaView*   m_view   = nullptr; // Nuestro puente con el negocio de la aplicación
 
+    // =========================================================================
+    // CONTROL DE ÁNGULOS Y MEMORIA DEL RATÓN PARA ROTACIÓN 3D
+    // =========================================================================
+    float   m_anguloX      = 0.0f;  // Rotación vertical (Pitch)
+    float   m_anguloY      = 0.0f;  // Rotación horizontal (Yaw)
+    QPoint  m_ultimaPosRat;         // Guarda el último píxel del cursor para calcular el movimiento (Delta)
 };
 
 

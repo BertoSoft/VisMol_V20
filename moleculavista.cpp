@@ -643,26 +643,37 @@ void MoleculaVista::cerrarProyecto(){
 void MoleculaVista::editar(){
     if (!m_view) return;
 
-    bool ok;
-    // Desplegamos el cuadro de diálogo nativo capturando el texto plano
-    QString nuevoComentario = QInputDialog::getText(
-        this,
-        tr("Propiedades del Compuesto"),
-        tr("Comentario / Título de la estructura molecular:"),
-        QLineEdit::Normal,
-        m_view->getComentario(), // Getter público totalmente legal
-        &ok
+    // 1. Instanciamos el cuadro de diálogo por código
+    QInputDialog dialogo(this);
+
+    // 2. Configuramos los textos y propiedades básicas
+    dialogo.setWindowTitle(tr("Comentario del Proyecto"));
+    dialogo.setLabelText(tr("Comentario / Título de la estructura molecular:"));
+    dialogo.setTextValue(m_view->getComentario());
+    dialogo.setTextEchoMode(QLineEdit::Normal);
+
+    // 3. Forzamos la geometría y el diseño mediante QSS especializado
+    dialogo.setStyleSheet(
+        "QLineEdit { "
+        "   min-width: 600px; "
+        "} "
+        "QLabel { "
+        "   min-height: 40px; "
+        "   max-height: 40px; "
+        "   font-size: 14px; "
+        "}"
         );
 
-    // Si el usuario acepta la ventana, actualizamos el cerebro a través de su interfaz pública
-    if (ok) {
-        m_view->setComentario(nuevoComentario); // Método público del bloque 2
+    // 4. Bloqueamos la interfaz y esperamos la respuesta del usuario (Modal)
+    int resultado = dialogo.exec();
 
-        // Sincronización indirecta legal: notificamos un refresco de estado al editor
-        // Esto forzará al lienzo a redibujarse y mantendrá la coherencia de la UI
+    // Si el usuario acepta la ventana, actualizamos el cerebro
+    if (resultado == QDialog::Accepted) {
+        QString nuevoComentario = dialogo.textValue();
+        m_view->setComentario(nuevoComentario);
+
+        // Sincronización indirecta para forzar el redibujado del lienzo
         m_view->setModoEditor(m_view->getModoEditor());
-
-        m_lblEstadoTexto->setText(tr(" Descripción del compuesto químico actualizada correctamente."));
     }
 }
 
@@ -828,6 +839,13 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
 
 void MoleculaVista::alCambiarModoEditor(const MoleculaView::ModoEditor& modoEditor){
     if (!m_view || !m_lienzo) return; // Protección de punteros
+
+    // =========================================================================
+    // LA VISTA ORDENA AL LIENZO RESETEARSE ANTES DE SINCRONIZAR LA BOTONERÍA
+    // =========================================================================
+    if (modoEditor != MoleculaView::ModoRotacion3D) {
+        m_lienzo->resetearVistaFrontal(); // <─── AQUÍ: MoleculaVista ejecuta la orden
+    }
 
     // 1. Sincronización visual de la botonería (Efecto hundido)
     switch(modoEditor) {
