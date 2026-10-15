@@ -53,6 +53,13 @@ void MoleculaVista::setMoleculaView(MoleculaView* view){
     // Cable 3 (¡NUEVO!): Desvía el texto generado por el negocio hacia la barra de estado de la UI
     connect(m_view, &MoleculaView::notificarMensajeEstado, m_lblEstadoTexto, &QLabel::setText);
 
+    // Cable 3.5 Muestra el texto generado por el log hacia el dock de la UI
+    connect(m_view, &MoleculaView::notificaContenidoLog, this, [this](const QString& texto) {
+        if (m_textoConsola) {
+            m_textoConsola->setText(texto);
+        }
+    });
+
     // Cable 4 conecta la señal de menuEliminar con el menu de boton derecho
     connect(m_view, &MoleculaView::setMenuEliminar, this, &MoleculaVista::setMenuBotonDerecho);
 
@@ -70,7 +77,7 @@ QString MoleculaVista::dialogoAbrirArchivo(){
         this,
         tr("Abrir Proyecto VisMol"),
         "",
-        tr("Archivos de MOPAC / VisMol / XYZ (*.dat *.out *.vismol *.xyz)")
+        tr("Archivos de MOPAC / VisMol / XYZ (*.dat *.out *.arc *.vismol *.xyz)")
         );
 }
 
@@ -169,17 +176,21 @@ void MoleculaVista::setMenuBotonDerecho(const int& idAtomo, const int& idEnlace)
 // =========================================================================
 
 void MoleculaVista::initUi(){
-
     setWindowTitle(NOMBRE_APP);
 
+    // 1. Crear primero las estructuras y paneles (Docks) en memoria
+    initDockPanels();    // Genera m_panelFrecuencias
+    initPanelConsola();  // Genera m_panelConsola y m_textoConsola
+
+    // 2. Crear las barras y menús que apuntarán a esos paneles
     initMenu();
     initToolBarSuperior();
     initToolBarIzda();
     initAnimacionBar();
-    initDockPanels();
-    initPanelConsola();
     initStatusBar();
     initLienzo();
+
+    // 3. Establecer cables y sincronizaciones seguras
     initConnect();
     setTemaApp();
 }
@@ -225,7 +236,7 @@ void MoleculaVista::initMenu(){
     m_accionesEdicion.rehacer->setIcon(QIcon(":/iconos/rehacer.png"));
 
     menuEdicion->addSeparator();
-    m_accionesEdicion.editar = menuEdicion->addAction(tr("Propiedades del Compuesto..."), this, &MoleculaVista::editar);
+    m_accionesEdicion.editar = menuEdicion->addAction(tr("Comentario del proyecto..."), this, &MoleculaVista::editar);
     m_accionesEdicion.editar->setIcon(QIcon(":/iconos/editar.png"));
 
     menuEdicion->addSeparator();
@@ -250,20 +261,13 @@ void MoleculaVista::initMenu(){
 
     m_accionesAnalisis.mostrarFreq = menuAnalisis->addAction(tr("Espectroscopía Vibracional (IR)"), this, &MoleculaVista::mostrarFrecuencias);
     m_accionesAnalisis.mostrarFreq->setIcon(QIcon(":/iconos/frecuencias.png"));
+    m_accionesAnalisis.mostrarFreq->setCheckable(true);
+    m_accionesAnalisis.mostrarFreq->setChecked(false);
 
-    m_accionesAnalisis.verLogOut = menuAnalisis->addAction(tr("Examinar Registro de Salida (.out)"), this, &MoleculaVista::verLogOut);
-    m_accionesAnalisis.verLogOut->setIcon(QIcon(":/iconos/log.png"));
-
-    // =========================================================================
-    // 5. GESTIÓN DEL ENTORNO GRÁFICO (MONITOR)
-    // =========================================================================
-    QMenu* menuMonitor = menuBarSuperior->addMenu(tr("&Monitor"));
-
-    m_accionesAnalisis.mostrarConsola = menuMonitor->addAction(tr("Consola de Simulación en Vivo"), this, [this](){
-        if(m_panelConsola) m_panelConsola->setVisible(!m_panelConsola->isVisible());
-    });
+    m_accionesAnalisis.mostrarConsola = menuAnalisis->addAction(tr("Mostrar fichero salida MOPAC"), this, &MoleculaVista::mostrarConsolaLog);
+    m_accionesAnalisis.mostrarConsola->setIcon(QIcon(":/iconos/ver_texto.png")); // Añade su icono correspondiente
     m_accionesAnalisis.mostrarConsola->setCheckable(true);
-    m_accionesAnalisis.mostrarConsola->setChecked(true);
+    m_accionesAnalisis.mostrarConsola->setChecked(false);
 }
 
 void MoleculaVista::initToolBarSuperior(){
@@ -277,10 +281,18 @@ void MoleculaVista::initToolBarSuperior(){
     m_barraProyecto->addAction(m_accionesArchivo.guardarComo);
     m_barraProyecto->addAction(m_accionesArchivo.cerrar);
     m_barraProyecto->addSeparator();
+    m_barraProyecto->addSeparator();
 
     m_barraProyecto->addAction(m_accionesEdicion.deshacer);
     m_barraProyecto->addAction(m_accionesEdicion.rehacer);
     m_barraProyecto->addAction(m_accionesEdicion.limpiarLienzo);
+    m_barraProyecto->addAction(m_accionesEdicion.editar);
+    m_barraProyecto->addSeparator();
+    m_barraProyecto->addSeparator();
+
+    m_barraProyecto->addAction(m_accionesAnalisis.mostrarFreq);
+    m_barraProyecto->addAction(m_accionesAnalisis.mostrarConsola);
+    m_barraProyecto->addSeparator();
     m_barraProyecto->addSeparator();
 
     m_barraProyecto->addAction(m_accionesCalculo.configurarMopac);
@@ -372,19 +384,19 @@ void MoleculaVista::initToolBarIzda(){
 void MoleculaVista::initPanelConsola(){
     m_panelConsola = new QDockWidget(tr("Monitor de Simulación en Vivo (MOPAC)"), this);
     m_panelConsola->setObjectName("panelConsolaMopac");
-    m_panelConsola->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
+    m_panelConsola->setAllowedAreas(Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
 
     m_textoConsola = new QTextEdit();
     m_textoConsola->setObjectName("textConsolaMopac");
     m_textoConsola->setReadOnly(true);
-
-    // Texto de simulación inicial simulado para desarrollo visual
     m_textoConsola->append("--- VISMOL: ESPERANDO EJECUCIÓN DEL MOTOR MOPAC ---");
     m_textoConsola->append(" > Use 'Configurar Simulación MOPAC...' para iniciar.");
 
     m_panelConsola->setWidget(m_textoConsola);
-    addDockWidget(Qt::BottomDockWidgetArea, m_panelConsola);
+    addDockWidget(Qt::RightDockWidgetArea, m_panelConsola);
 
+    // Ocultar de fábrica para evitar que el render del S.O. lo fuerce al iniciar
+    m_panelConsola->hide();
 }
 
 void MoleculaVista::initAnimacionBar(){
@@ -441,6 +453,9 @@ void MoleculaVista::initDockPanels(){
 
     m_panelFrecuencias->setWidget(m_listaFrecuencias);
     addDockWidget(Qt::RightDockWidgetArea, m_panelFrecuencias);
+
+    // Ocultar de fábrica
+    m_panelFrecuencias->hide();
 }
 
 void MoleculaVista::initStatusBar(){
@@ -498,6 +513,12 @@ void MoleculaVista::initConnect(){
     connect(m_deslizadorFotogramas, &QSlider::valueChanged, this, &MoleculaVista::alCambiarDeslizadorFotograma);
 
     connect(m_listaFrecuencias, &QListWidget::currentRowChanged, this, &MoleculaVista::alSeleccionarFrecuencia);
+
+    connect(m_accionesAnalisis.mostrarConsola, &QAction::toggled, m_panelConsola, &QDockWidget::setVisible);
+    connect(m_accionesAnalisis.mostrarFreq, &QAction::toggled, m_panelFrecuencias, &QDockWidget::setVisible);
+
+    connect(m_panelConsola, &QDockWidget::visibilityChanged, m_accionesAnalisis.mostrarConsola, &QAction::setChecked);
+    connect(m_panelFrecuencias, &QDockWidget::visibilityChanged, m_accionesAnalisis.mostrarFreq, &QAction::setChecked);
 
     // Iniciamos los valores de Fabrica
     MoleculaView::ModoLienzo modo;
@@ -699,7 +720,7 @@ void MoleculaVista::configurarMopac(){
 
 void MoleculaVista::mostrarFrecuencias(){}
 
-void MoleculaVista::verLogOut()        {}
+void MoleculaVista::mostrarConsolaLog(){}
 
 // =========================================================================
 // ZONA: INTERACCIONES Y BOTONERÍA DE INTERFAZ
@@ -707,61 +728,101 @@ void MoleculaVista::verLogOut()        {}
 
 void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLienzo){
 
-    // REGLA 1: La barra de herramientas para dibujar átomos solo se activa si hay un lienzo iniciado
+    // =========================================================================
+    // CAPA 1: ESTADOS BINARIOS DIRECTOS (HERRAMIENTAS DE EDICIÓN Y ARCHIVO)
+    // =========================================================================
+
+    // Activar barras de dibujo solo si el lienzo se encuentra inicializado en memoria
     m_barraElementos->setEnabled(modoLienzo.estaIniciado);
 
-    // REGLA 2: Acciones de archivo básicas de limpieza y cierre de documentos
+    // Acciones de persistencia y topología básicas (Exigen que no esté vacío)
     m_accionesArchivo.cerrar->setEnabled(!modoLienzo.estaVacio);
     m_accionesEdicion.limpiarLienzo->setEnabled(!modoLienzo.estaVacio);
+    m_accionesEdicion.editar->setEnabled(modoLienzo.estaIniciado && modoLienzo.formato != TipoFormato::OUT && modoLienzo.formato != TipoFormato::ARC);
     m_accionesArchivo.guardar->setEnabled(!modoLienzo.estaVacio);
     m_accionesArchivo.guardarComo->setEnabled(!modoLienzo.estaVacio);
-    m_accionesEdicion.editar->setEnabled(modoLienzo.estaIniciado);
-
-    // REGLA 3: Historial dinámico basado en las pilas del negocio molecular
-    if (m_view) {
-        m_accionesEdicion.deshacer->setEnabled(m_view->hayPasado());
-        m_accionesEdicion.rehacer->setEnabled(m_view->hayFuturo());
-    } else {
-        m_accionesEdicion.deshacer->setEnabled(false);
-        m_accionesEdicion.rehacer->setEnabled(false);
-    }
-
-    // REGLA 4: Las herramientas de interacción avanzada exigen que existan átomos en pantalla
     m_accionesElementos.modoEnlace->setEnabled(!modoLienzo.estaVacio);
     m_accionesElementos.modoRotar->setEnabled(!modoLienzo.estaVacio);
 
-    // REGLA 5: Bloque de Simulación y Post-Procesado (Cálculo y Análisis)
-    m_accionesCalculo.configurarMopac->setEnabled(!modoLienzo.estaVacio);
-    m_accionesAnalisis.mostrarFreq->setEnabled(!modoLienzo.estaVacio);
-    m_accionesAnalisis.mostrarConsola->setEnabled(!modoLienzo.estaVacio);
-    m_accionesAnalisis.verLogOut->setEnabled(!modoLienzo.estaVacio);
+    // =========================================================================
+    // CAPA 2: REGLAS DE NEGOCIO CIENTÍFICO (CONFIGURACIÓN DE SIMULACIÓN MOPAC)
+    // =========================================================================
 
-    // REGLA 6: Ocultación automatizada de paneles auxiliares si el lienzo se queda vacío
-    if (modoLienzo.estaVacio) {
-        m_panelFrecuencias->setVisible(false);
-        m_panelConsola->setVisible(false);
+    // El motor de cálculo exige que haya átomos en pantalla pero bloquea nuevas simulaciónes
+    // si el archivo abierto ya corresponde a un resultado final cuántico compilado (.out)
+    m_accionesCalculo.configurarMopac->setEnabled(!modoLienzo.estaVacio && modoLienzo.formato != TipoFormato::OUT && modoLienzo.formato != TipoFormato::ARC);
+
+    // =========================================================================
+    // CAPA 3: HISTORIAL DINÁMICO (PILAS DE COMANDOS DESHACER / REHACER)
+    // =========================================================================
+
+    // El árbol del historial requiere una red de seguridad que verifique la existencia del cerebro
+    bool hayView = (m_view != nullptr);
+    m_accionesEdicion.deshacer->setEnabled(hayView && m_view->hayPasado());
+    m_accionesEdicion.rehacer->setEnabled(hayView && m_view->hayFuturo());
+
+    // =========================================================================
+    // CAPA 4: ENTORNOS COMPLEMENTARIOS (REPRODUCTOR DE TRAYECTORIAS)
+    // =========================================================================
+
+    // Si la simulación cuántica se vacía o cierra, retiramos la barra de animación de pantalla
+    if (modoLienzo.estaVacio && m_barraAnimacion) {
         m_barraAnimacion->setVisible(false);
     }
 
-    // REGLA 7: Gestión semántica del título dinámico de la ventana principal
+    // =========================================================================
+    // CAPA 5: COMPORTAMIENTO SEMÁNTICO (TÍTULO DINÁMICO DE LA APLICACIÓN)
+    // =========================================================================
     if (modoLienzo.estaVacio) {
-        // Escenario A: Lienzo limpio y vacío de fábrica, no hay nombre ni asterisco
         setWindowTitle(NOMBRE_APP);
-    }
-    else if (modoLienzo.estaGuardado) {
-        // Escenario B: Acabas de abrir un archivo o la Vista acaba de llamar a setRutaArchivoActual.
-        // Obtenemos el nombre limpio del archivo para mostrarlo orgulloso y SIN asterisco.
-        QString nombreArchivo = QFileInfo(m_view->getRutaArchivoActual()).fileName();
-        setWindowTitle(NOMBRE_APP + tr(" - %1").arg(nombreArchivo));
-    }
-    else {
-        // Escenario C: El usuario ha dibujado un átomo, ha borrado un enlace o ha modificado algo.
-        // Obtenemos el nombre actual (o "Sin Título" si es nuevo) y le clavamos el asterisco (*).
-        QString nombreArchivo = m_view->getRutaArchivoActual().isEmpty()
-                                    ? tr("Sin Título")
-                                    : QFileInfo(m_view->getRutaArchivoActual()).fileName();
+    } else {
+        // Extraemos de manera segura el nombre plano del archivo molecular cargado actualmente
+        QString ruta   = m_view ? m_view->getRutaArchivoActual() : "";
+        QString nombre = ruta.isEmpty() ? tr("Sin Título") : QFileInfo(ruta).fileName();
 
-        setWindowTitle(NOMBRE_APP + tr(" - %1* (Cambios sin guardar)").arg(nombreArchivo));
+        // El título concatena un asterisco (*) de alerta si detecta modificaciones pendientes de guardado
+        setWindowTitle(modoLienzo.estaGuardado ? NOMBRE_APP + tr(" - %1").arg(nombre)
+                                               : NOMBRE_APP + tr(" - %1* (Cambios sin guardar)").arg(nombre));
+    }
+
+    // =========================================================================
+    // CAPA 6: MÁQUINA DE ESTADOS COMPORTAMENTAL PARA PANELES DE ANÁLISIS
+    // =========================================================================
+
+    // Evaluamos los criterios de compatibilidad química específicos para cada tipo de panel
+    bool admiteConsola     = (!modoLienzo.estaVacio && (modoLienzo.formato == TipoFormato::OUT || modoLienzo.formato == TipoFormato::ARC));
+    bool admiteFrecuencias = (!modoLienzo.estaVacio && modoLienzo.formato == TipoFormato::OUT);
+
+    // --- SUBSECCIÓN A: GESTIÓN DE LA CONSOLA DE TEXTO (SOPORTA .OUT Y .ARC) ---
+    m_accionesAnalisis.mostrarConsola->setEnabled(admiteConsola);
+
+    if (!admiteConsola) {
+        // Escenario A1: Lienzo vacío o formatos simples (.xyz / .vismol) -> Ocultar panel
+        if (m_panelConsola) m_panelConsola->hide();
+
+        // Desactivamos el check del menú de manera silenciosa para evitar bucles de eventos
+        m_accionesAnalisis.mostrarConsola->blockSignals(true);
+        m_accionesAnalisis.mostrarConsola->setChecked(false);
+        m_accionesAnalisis.mostrarConsola->blockSignals(false);
+    } else {
+        // Escenario A2: Carga de un archivo .out o .arc -> Forzar apertura en pantalla
+        m_accionesAnalisis.mostrarConsola->setChecked(true);
+    }
+
+    // --- SUBSECCIÓN B: GESTIÓN DEL PANEL DE FRECUENCIAS (SOPORTA ÚNICAMENTE .OUT) ---
+    m_accionesAnalisis.mostrarFreq->setEnabled(admiteFrecuencias);
+
+    if (!admiteFrecuencias) {
+        // Escenario B1: Lienzo vacío o formatos sin espectroscopía (.xyz / .vismol / .arc) -> Ocultar panel
+        if (m_panelFrecuencias) m_panelFrecuencias->hide();
+
+        // Desactivamos el check del menú de manera silenciosa para evitar bucles de eventos
+        m_accionesAnalisis.mostrarFreq->blockSignals(true);
+        m_accionesAnalisis.mostrarFreq->setChecked(false);
+        m_accionesAnalisis.mostrarFreq->blockSignals(false);
+    } else {
+        // Escenario B2: Carga de un archivo .out -> Forzar apertura en pantalla
+        m_accionesAnalisis.mostrarFreq->setChecked(true);
     }
 }
 
@@ -969,7 +1030,7 @@ void MoleculaVista::setTemaApp(){
         "QDockWidget { "
         "color: #bbbbbb; "
         "font-weight: bold; "
-        "font-size: 12px; "
+        "font-size: 14px; "
         "}"
 
         "QDockWidget::title { "
@@ -981,13 +1042,14 @@ void MoleculaVista::setTemaApp(){
 
         // Listas (Frecuencias) - Un verde esmeralda más tecnológico y menos "Matrix"
         "QListWidget#listaFrecuencias { "
-        "background-color: #141414; "
+        "background-color: #202225; "
         "color: #39ff14; "
         "border: 1px solid #2d2d2d; "
         "border-radius: 4px; "
         "font-family: 'Consolas', 'Courier New', monospace; "
-        "font-size: 12px; "
+        "font-size: 14px; "
         "padding: 6px; "
+        "min-width: 700px; " /* ¡NUEVO! Fuerza a que el panel sea el triple de ancho */
         "}"
 
         "QListWidget#listaFrecuencias::item { "
@@ -1029,11 +1091,12 @@ void MoleculaVista::setTemaApp(){
 
         // Consola de Simulación
         "QTextEdit#textConsolaMopac { "
-        "background-color: #101010; "
+        "background-color: #202225; "
         "color: #e5e5e5; border: 1px solid #2d2d2d; "
         "font-family: 'Consolas', monospace; "
-        "font-size: 12px; "
+        "font-size: 14px; "
         "padding: 8px; "
+        "min-width: 700px; " /* ¡NUEVO! Fuerza a que el panel sea el triple de ancho */
         "}";
 
 

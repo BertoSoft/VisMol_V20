@@ -21,6 +21,7 @@ public:
 protected:
 
     void mousePressEvent(QMouseEvent* mouseEv) override;
+    void resizeEvent(QResizeEvent* event) override;
 
 private:
     QGraphicsScene* m_escena = nullptr; // El espacio infinito donde se colocarán los gráficos

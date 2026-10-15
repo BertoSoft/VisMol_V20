@@ -9,6 +9,14 @@
 // =========================================================================
 // ZONA: ESTRUCTURAS DE DATOS GLOBALES (MODELO QUÍMICO BASE)
 // =========================================================================
+enum TipoFormato {
+    VISMOL,
+    DAT,
+    OUT,
+    ARC,
+    NO_SE_SABE
+};
+
 struct Atomo {
     int id;
     QString simbolo;
@@ -31,13 +39,14 @@ public:
         ModoSeleccion,
         ModoDibujo,
         ModoCrearEnlace,
-        ModoRotacion3D
+        ModoRotacion3D,
     };
 
     struct ModoLienzo {
-        bool estaVacio      = true;
-        bool estaGuardado   = false;
-        bool estaIniciado   = false;
+        bool            estaVacio       = true;
+        bool            estaGuardado    = false;
+        bool            estaIniciado    = false;
+        TipoFormato     formato         = TipoFormato::NO_SE_SABE;
     };
 
     // =========================================================================
@@ -105,13 +114,13 @@ signals:
     void            modoEditorCambiado(MoleculaView::ModoEditor modo);
     void            modoLienzoCambiado(MoleculaView::ModoLienzo modo);
     void            notificarMensajeEstado(const QString& mensaje);
+    void            notificaContenidoLog(const QString& log);
     void            setMenuEliminar(const int& idAtomo, const int& idEnlace);
 
     // =========================================================================
     // 8. ZONA: MÉTODOS INTERNOS PRIVADOS (PROCESAMIENTO DE CLICKS GRÁFICOS)
     // =========================================================================
 private:
-    void        setElementoSeleccionado(int idAtomoSeleccionado);
     void        procesarClickDibujoAtomo(const QVector3D& posClick);
     void        procesarClickSeleccion(const QVector3D& posClick);
     void        procesarClickCrearEnlace(const QVector3D& posClick);
@@ -133,9 +142,9 @@ private:
 private:
     void        setModoLienzo(const ModoLienzo& modoLienzo);
     void        setMensajeEstado();
-    QString     getTipoArchivo(const QString& ruta); // Tu clasificador inteligente de tokens
+    TipoFormato getTipoArchivo(const QString& ruta); // Tu clasificador inteligente de tokens
     QString     loadFileVisMol(const QString& ruta); // Oculto y protegido de la interfaz gráfica
-    QString     loadFileMOPAC(const QString& ruta);  // Oculto y protegido de la interfaz gráfica
+    QString     loadFileMOPAC(const QString& ruta, TipoFormato formato);  // Oculto y protegido de la interfaz gráfica
     QString     saveFileVisMol(const QString& ruta);
     QString     saveFileMOPAC(const QString& ruta, const QString& argumentos);
 

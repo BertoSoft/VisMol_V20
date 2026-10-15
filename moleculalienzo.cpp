@@ -9,6 +9,8 @@
 #include <QColor>
 #include <QGraphicsSimpleTextItem>
 #include <QtMath> // Requerido para qSqrt()
+#include <QScrollArea>
+#include <QScrollBar>
 
 MoleculaLienzo::MoleculaLienzo(QWidget* parent)
     : QGraphicsView(parent){
@@ -29,6 +31,8 @@ MoleculaLienzo::MoleculaLienzo(QWidget* parent)
     // Evita que aparezcan barras de scroll molestas si nos acercamos a los bordes
     this->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     this->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+
 }
 
 MoleculaLienzo::~MoleculaLienzo(){
@@ -200,7 +204,6 @@ void MoleculaLienzo::actualizarLienzo(){
             );
         texto->setZValue(2);
     }
-
 }
 
 //##############################################################################################
@@ -227,4 +230,19 @@ void MoleculaLienzo::mousePressEvent(QMouseEvent* mouseEv){
     }
 
     QGraphicsView::mousePressEvent(mouseEv);
+}
+
+void MoleculaLienzo::resizeEvent(QResizeEvent* event){
+    // 1. Permitimos que QGraphicsView asimile las nuevas dimensiones del widget
+    QGraphicsView::resizeEvent(event);
+
+    // 2. Limpiamos cualquier transformación de escala previa (Garantiza 1 Unidad = 1 Å)
+    this->resetTransform();
+
+    // 3. Forzamos a la escena a recalcular y sincronizar sus dimensiones internas
+    // justo después del impacto del tamaño del dock
+    m_escena->update();
+
+    centerOn(0,0);
+
 }

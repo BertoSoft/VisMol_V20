@@ -62,7 +62,7 @@ private slots:
     void limpiarLienzo();
     void configurarMopac();
     void mostrarFrecuencias();
-    void verLogOut();
+    void mostrarConsolaLog();
 
     // =========================================================================
     // BLOQUE: GESTIÓN DE BOTONERÍA Y CONTROLES INTERNOS DE INTERFAZ
@@ -109,7 +109,6 @@ private:
     struct AccionesAnalisis {
         QAction* mostrarFreq    = nullptr;
         QAction* mostrarConsola = nullptr;
-        QAction* verLogOut      = nullptr;
     } m_accionesAnalisis;
 
     struct AccionesElementos {

@@ -87,33 +87,32 @@ void MoleculaView::setNuevoProyecto(){
 }
 
 void MoleculaView::deshacer() {
-    if (m_atras.isEmpty()) return; // Red de seguridad
+    if (m_atras.isEmpty()) return;
 
-    // 1. Guardamos el presente en el futuro por si el usuario se arrepiente
     pushAdelante();
-
-    // 2. Extraemos el pasado físico y pisamos la memoria actual
     popAtras();
 
-    // 3. Tu código original: simple, directo y totalmente correcto
-    setModoLienzo(m_modoLienzo);
+    // Forzamos un estado temporal que notifique que el archivo ha cambiado respecto al disco
+    ModoLienzo modoTmp = m_modoLienzo;
+    modoTmp.estaGuardado = false;
+    setModoLienzo(modoTmp);
 }
 
 void MoleculaView::rehacer() {
-    if (m_adelante.isEmpty()) return; // Red de seguridad
+    if (m_adelante.isEmpty()) return;
 
-    // 1. Guardamos el presente en el pasado de forma directa (sin limpiar m_adelante)
     FotoActual fotoPresente;
     fotoPresente.listaAtomos  = m_listaAtomos;
     fotoPresente.listaEnlaces = m_listaEnlaces;
     fotoPresente.contadorIds  = m_contadorIds;
     m_atras.append(fotoPresente);
 
-    // 2. Extraemos el futuro físico y pisamos la memoria actual
     popAdelante();
 
-    // 3. Tu código original: simple, directo y totalmente correcto
-    setModoLienzo(m_modoLienzo);
+    // Mismo principio: avanzar al futuro alternativo rompe la simetría del archivo en disco
+    ModoLienzo modoTmp = m_modoLienzo;
+    modoTmp.estaGuardado = false;
+    setModoLienzo(modoTmp);
 }
 
 // =========================================================================
@@ -126,96 +125,64 @@ QString MoleculaView::abrirArchivo(const QString& ruta){
         return tr("La ruta del archivo especificada está vacía.");
     }
 
+    // 1. Clasificamos el fichero de forma autónoma inspeccionando sus marcas internas
+    TipoFormato formatoDeteccion = getTipoArchivo(ruta);
     QString respuesta = "";
 
-    // 1. Clasificamos el fichero de forma autónoma inspeccionando sus marcas internas
-    QString formatoDeteccion = getTipoArchivo(ruta);
-
-    // 2. ENRUTAMIENTO DIRECTO SEGURO SEGÚN EL CONTENIDO REAL
-    if (formatoDeteccion == ".vismol") {
-        respuesta = loadFileVisMol(ruta); // Tu parseador nativo de proyectos
+    // 2. ENRUTAMIENTO DIRECTO SEGURO SEGÚN EL CONTENIDO REAL DETECTADO
+    if (formatoDeteccion == TipoFormato::VISMOL) {
+        respuesta = loadFileVisMol(ruta); // Carga nativa pura (Geometría + Conectividad)
     }
-
-    if (formatoDeteccion == ".out") {
-        respuesta = loadFileMOPAC(ruta); // Tu motor de procesamiento cuántico
+    else if (formatoDeteccion == TipoFormato::OUT || formatoDeteccion == TipoFormato::ARC || formatoDeteccion == TipoFormato::DAT) {
+        // Redirigimos de forma unificada hacia el cargador transaccional unificado para MOPAC
+        respuesta = loadFileMOPAC(ruta, formatoDeteccion);
     }
-
-    if (formatoDeteccion == ".arc") {
-        // Dejamos el gancho semántico listo para cuando programes este lector
-        respuesta =  tr("Archivo de resumen (.arc) detectado. El lector para este formato se encuentra en desarrollo.");
-    }
-    if (formatoDeteccion == ".dat") {
-        // Dejamos el gancho semántico listo para cuando programes este lector
-        respuesta = loadFileMOPAC(ruta); // Tu motor de procesamiento cuántico
-    }
-    if(formatoDeteccion == "*.*"){
-        // 3. Si devuelve "*.*" o un formato desconocido, abortamos con un mensaje elegante
+    else {
+        // Si devuelve "*.*" o un formato no mapeado por las firmas, abortamos elegantemente
         return tr("El archivo seleccionado no contiene ninguna firma molecular o formato reconocido por el sistema.");
     }
 
-    if(respuesta == ""){
+    // 3. CONTROL DE ÉXITO DE LA TRANSACCIÓN:
+    // Si la respuesta es vacía "" o es la advertencia controlada de topología, registramos la ruta activa
+    if (respuesta.isEmpty() || respuesta == "AVISO_TOPOLOGIA") {
         m_rutaArchivoActual = ruta;
-        return respuesta;
     }
-    else{
-        return respuesta;
-    }
+
+    return respuesta;
 
 }
 
 QString MoleculaView::guardarArchivo(const QString& ruta){
     if (ruta.isEmpty()) {
-        return tr("La ruta de destino especificada está vacía.");
+        return tr("La ruta del archivo especificada está vacía.");
     }
 
-    // 1. INTENTO DE DETECCIÓN INTELIGENTE POR CONTENIDO REAL
-    QString formatoDeteccion = getTipoArchivo(ruta);
+    // 1. Clasificamos el fichero de forma autónoma inspeccionando sus marcas internas
+    TipoFormato formatoDeteccion = getTipoArchivo(ruta);
+    QString respuesta = "";
 
-    // 2. RED DE SEGURIDAD: SI ES NUEVO O ESTÁ VACÍO (*.*), DISCRIMINAMOS POR EXTENSIÓN
-    if (formatoDeteccion == "*.*") {
-        QFileInfo info(ruta);
-        QString extension = info.suffix().toLower();
-
-        if (extension == "vismol") {
-            formatoDeteccion = ".vismol";
-        }
-        else if (extension == "dat" || extension == "mop" || extension == "out") {
-            formatoDeteccion = ".dat"; // Identificador para el bloque de MOPAC
-        }
+    // 2. ENRUTAMIENTO DIRECTO CORREGIDO
+    if (formatoDeteccion == TipoFormato::VISMOL) {
+        respuesta = saveFileVisMol(ruta); // <-- CORREGIDO: Llama a save, no a load
     }
-
-    // 3. ENRUTAMIENTO CENTRALIZADO Y EXCLUSIVO
-    QString errorEscribir = "";
-
-    if (formatoDeteccion == ".vismol") {
-        // Formato nativo puro
-        errorEscribir = DatosIO::saveVisMol(ruta, m_listaAtomos, m_listaEnlaces, m_comentario);
-    }
-    else if (formatoDeteccion == ".dat" || formatoDeteccion == ".out") {
-        // Archivos cuánticos y sus sobreescrituras: van DIRECTOS al motor MOPAC
-        if (m_argumentos.isEmpty()) {
-            return tr("MOPAC exige al menos una palabra clave (Keyword) para poder guardar el archivo.");
-        }
-        // Llama a tu método de la ZONA 10, que se encarga de empaquetar el .dat/.mop
-        errorEscribir = saveFileMOPAC(ruta, m_argumentos);
+    else if (formatoDeteccion == TipoFormato::OUT || formatoDeteccion == TipoFormato::ARC || formatoDeteccion == TipoFormato::DAT) {
+        respuesta = saveFileMOPAC(ruta, m_argumentos);
     }
     else {
-        return tr("El formato o la extensión del archivo no son reconocidos por el sistema para su guardado.");
+        // Fallback defensivo por extensión si el archivo es nuevo y no tiene marcas aún
+        if (ruta.endsWith(".vismol", Qt::CaseInsensitive)) {
+            respuesta = saveFileVisMol(ruta);
+        } else {
+            respuesta = saveFileMOPAC(ruta, m_argumentos);
+        }
     }
 
-    // =========================================================================
-    // 4. SEÑALIZACIÓN TRANSACCIONAL DE ÉXITO (MEMORIA Y ASTERISCO)
-    // =========================================================================
-    if (errorEscribir.isEmpty() || errorEscribir == "AVISO_RESPALDO_FALLIDO") {
-        m_rutaArchivoActual = ruta.trimmed();
-
-        m_modoLienzo.estaGuardado = true;
-        m_modoLienzo.estaVacio    = m_listaAtomos.isEmpty();
-
-        emit modoLienzoCambiado(m_modoLienzo);
+    // 3. CONTROL DE ÉXITO DE LA TRANSACCIÓN:
+    if (respuesta.isEmpty() || respuesta == "AVISO_TOPOLOGIA") {
+        m_rutaArchivoActual = ruta;
     }
 
-    return errorEscribir;
+    return respuesta;
 }
 
 // =========================================================================
@@ -429,10 +396,6 @@ QString MoleculaView::getRutaArchivoActual(){
 // 8. ZONA: MÉTODOS INTERNOS PRIVADOS (PROCESAMIENTO DE CLICKS GRÁFICOS)
 // =========================================================================
 
-void MoleculaView::setElementoSeleccionado(int idAtomoSeleccionado){
-
-}
-
 void MoleculaView::procesarClickDibujoAtomo(const QVector3D& posClick) {
     if(getIdAtomoFromPos(posClick) < 0){
 
@@ -621,34 +584,31 @@ void MoleculaView::popAdelante() {
 // =========================================================================
 
 void MoleculaView::setModoLienzo(const ModoLienzo& modoLienzo){
-    // 1. Calculamos la realidad objetiva de los almacenes de memoria
+    // 1. Calculamos la realidad física de la memoria en este instante
     bool vacioAhora = m_listaAtomos.isEmpty() && m_listaEnlaces.isEmpty();
 
-    // =========================================================================
-    // LÓGICA DE PERSISTENCIA DETECTORA DE CAMBIOS
-    // =========================================================================
-    /* Si el lienzo se vacía, el guardado se apaga.
-       Si el lienzo NO está vacío, evaluamos de forma transaccional:
-       ¿Se ha llamado a este método desde una carga/guardado exitoso?
-       Si la respuesta es NO (es decir, viene de un clic de dibujo o eliminación),
-       forzamos 'estaGuardado = false' para activar el asterisco en la interfaz. */
+    // 2. Evaluamos el estado de guardado de forma robusta
     bool guardadoReal = modoLienzo.estaGuardado;
-
-    // Si el emisor de la llamada fue una alteración manual en pantalla (dibujar/borrar)
-    if (m_modoLienzo.estaIniciado && !vacioAhora && modoLienzo.estaGuardado == m_modoLienzo.estaGuardado) {
-        guardadoReal = false; // ¡Se ha modificado el lienzo! Flag de guardado apagado
-    }
 
     if (vacioAhora) {
         guardadoReal = false;
     }
+    else {
+        // DETECCIÓN CRÍTICA: Si la llamada se hizo usando 'm_modoLienzo' directamente
+        // significa que proviene de un clic rutinario de ratón (dibujar, enlazar o borrar).
+        // Forzamos la pérdida del guardado para que salte el asterisco de inmediato.
+        if (&modoLienzo == &m_modoLienzo) {
+            guardadoReal = false;
+        }
+    }
 
-    // 3. Asignamos los tres estados en un único rincón controlado
+    // 3. Asignamos los estados de forma segura en nuestro contenedor oficial de clase
     m_modoLienzo.estaIniciado = modoLienzo.estaIniciado;
     m_modoLienzo.estaGuardado = guardadoReal;
     m_modoLienzo.estaVacio    = vacioAhora;
+    m_modoLienzo.formato      = modoLienzo.formato;
 
-    // 4. EMISIÓN ATÓMICA CENTRALIZADA HACIA LA INTERFAZ
+    // 4. EMISIÓN CENTRALIZADA SINCRÓNICA
     emit modoEditorCambiado(m_modoActual);
     emit modoLienzoCambiado(m_modoLienzo);
     emit actualizarLienzo();
@@ -691,7 +651,7 @@ QString MoleculaView::loadFileVisMol(const QString& ruta){
     QVector<Enlace> listaEnlacesTemporal;
     QString         comentarioTemporal;
 
-    // 2. Invocamos al parseador pasándole las referencias temporales
+    // 2. Invocamos al parseador estático de DatosIO pasándole las referencias temporales
     QString error = DatosIO::loadVisMol(ruta, listaAtomosTemporal, listaEnlacesTemporal, comentarioTemporal);
 
     // 3. EN CASO DE ERROR, ABORTAMOS INMEDIATAMENTE (Sin tocar la memoria de la clase)
@@ -721,94 +681,108 @@ QString MoleculaView::loadFileVisMol(const QString& ruta){
     m_adelante.clear();
 
     // Forzamos el refresco completo de la salud del documento y los widgets de interfaz
+    m_rutaArchivoActual = ruta; // <--- Registramos la ruta AQUÍ primero
+
     ModoLienzo modo;
     modo.estaVacio     = m_listaAtomos.isEmpty();
     modo.estaGuardado  = true; // Sincronizado con el disco recién abierto
     modo.estaIniciado  = true; // Enciende las barras de herramientas
+    modo.formato       = TipoFormato::VISMOL;
 
     setModoLienzo(modo);
 
     return ""; // Éxito total
 }
 
-QString MoleculaView::loadFileMOPAC(const QString& ruta){
-    if (ruta.isEmpty()) return "Debes especificar una ruta de archivo de salida de MOPAC válida.";
-
-    // =========================================================================
-    // 1. CARGA DE COORDENADAS CUÁNTICAS DESDE EL .OUT (PROCESAMIENTO LIMPIO)
-    // =========================================================================
-    QVector<Atomo>  listaAtomosOptimizada;
+QString MoleculaView::loadFileMOPAC(const QString& ruta, TipoFormato formato){
+    // 1. Contenedores locales reales en memoria para el intercambio transaccional seguro
+    QVector<Atomo>  listaAtomosTemporal;
+    QVector<Enlace> listaEnlacesTemporal;
     QString         comentarioTemporal;
     QString         argumentosTemporal;
+    QString         textoTemporal; // <--- Variable limpia en la pila
 
-    QString error = DatosIO::loadMOPAC(ruta, listaAtomosOptimizada, comentarioTemporal, argumentosTemporal);
-    if (!error.isEmpty()) {
-        return error; // Aborto inmediato: El archivo .out está corrupto o incompleto
+    // 2. Invocación segura enviando referencias a objetos reales creados en la pila
+    QString errorParser = DatosIO::loadMOPAC(ruta, listaAtomosTemporal, listaEnlacesTemporal,
+                                             comentarioTemporal, argumentosTemporal, formato, textoTemporal);
+
+    if (!errorParser.isEmpty()) {
+        return errorParser; // Abortamos la carga si el parser físico falla
     }
 
-    // Una vez garantizado que el .out es válido, alteramos la memoria de forma segura
-    pushAtras();
+    // 3. Tras el éxito del procesamiento, limpiamos de forma segura la memoria activa del negocio
+    resetVariablesClase();
 
-    // =========================================================================
-    // 2. SISTEMA DE RECUPERACIÓN TOPOLÓGICA ESPEJO (.vismol)
-    // =========================================================================
-    QFileInfo info(ruta);
-    QString rutaEspejoVismol = info.absolutePath() + "/" + info.baseName() + ".vismol";
+    m_listaAtomos  = listaAtomosTemporal;
+    m_comentario   = comentarioTemporal;
+    m_argumentos   = argumentosTemporal;
 
-    QVector<Atomo>  listaAtomosEspejo;
-    QVector<Enlace> listaEnlacesEspejo;
-    QString         comentarioEspejo;
-
-    QString errorEspejo = DatosIO::loadVisMol(rutaEspejoVismol, listaAtomosEspejo, listaEnlacesEspejo, comentarioEspejo);
-    QString tokenResultado = "";
-
-    if (errorEspejo.isEmpty() && listaAtomosEspejo.size() == listaAtomosOptimizada.size()) {
-        // CASO A: Sincronización molecular perfecta (Geometría cuántica + Enlaces)
-        m_listaEnlaces = listaEnlacesEspejo;
-        m_listaAtomos  = listaAtomosEspejo;
-
-        for (int i = 0; i < m_listaAtomos.size(); ++i) {
-            m_listaAtomos[i].posicion = listaAtomosOptimizada[i].posicion;
-        }
-        m_comentario = "Geometría Optimizada de MOPAC + Enlaces de Respaldo";
-    }
-    else {
-        // CASO B: Carga desnuda controlada (Aviso a la interfaz de usuario)
-        m_listaAtomos = listaAtomosOptimizada;
-        m_listaEnlaces.clear();
-        m_comentario  = comentarioTemporal;
-
-        tokenResultado = "AVISO_TOPOLOGIA"; // Token semántico para la Vista
-    }
-
-    // =========================================================================
-    // 3. SINCRONIZACIÓN CENTRALIZADA DE IDS Y EMISIÓN HÁPTICA DEL LIENZO
-    // =========================================================================
+    // Reajustar el contador secuencial de IDs al valor máximo de los átomos leídos
     int maxId = 0;
-    for (const Atomo& atomo : m_listaAtomos) {
-        if (atomo.id > maxId) {
-            maxId = atomo.id;
-        }
+    for (const Atomo& a : m_listaAtomos) {
+        if (a.id > maxId) maxId = a.id;
     }
     m_contadorIds = maxId;
 
+    // =========================================================================
+    // EMISIÓN REACTIVA DIRECTA HACIA LA VISTA
+    // =========================================================================
+    if (formato == TipoFormato::OUT || formato == TipoFormato::ARC) {
+        emit notificaContenidoLog(textoTemporal);
+    } else {
+        emit notificaContenidoLog("");
+    }
+
+    // 4. INTENTO AUTOMÁTICO DE RECUPERACIÓN DE ENLACES (Búsqueda del espejo estructural .vismol)
+    QFileInfo info(ruta);
+    QString rutaEspejoVismol = info.absolutePath() + "/" + info.baseName() + ".vismol";
+
+    bool topologiaCargadaConExito = false;
+
+    if (QFile::exists(rutaEspejoVismol)) {
+        QVector<Atomo>  basuraAtomos; // Contenedor secundario para descartar duplicación geométrica
+        QString         basuraComentario;
+
+        // Intentamos extraer exclusivamente la matriz de conectividad [ENLACES]
+        QString errorEspejo = DatosIO::loadVisMol(rutaEspejoVismol, basuraAtomos, listaEnlacesTemporal, basuraComentario);
+        if (errorEspejo.isEmpty()) {
+            m_listaEnlaces = listaEnlacesTemporal;
+            topologiaCargadaConExito = true;
+        }
+    }
+
+    // 5. Reinicialización completa del estado de salud del Lienzo
+    m_atras.clear();
+    m_adelante.clear();
+
+    m_rutaArchivoActual = ruta; // <--- Registramos la ruta AQUÍ primero
+
     ModoLienzo modo;
     modo.estaVacio    = m_listaAtomos.isEmpty();
-    modo.estaGuardado = false;
-    modo.estaIniciado = true;
+    modo.estaGuardado = true; // El archivo coincide simétricamente con lo almacenado en disco
+    modo.estaIniciado = true; // Reactivamos las paletas de interacción lateral de la interfaz
+    modo.formato      = formato;
 
     setModoLienzo(modo);
 
-    return tokenResultado; // Retorno limpio de estado
+    // Si la lectura cuántica es exitosa pero no había archivo .vismol para los enlaces,
+    // devolvemos tu aviso personalizado para desplegar el diálogo informativo en la Vista.
+    if (!topologiaCargadaConExito) {
+        return "AVISO_TOPOLOGIA";
+    }
+
+    return ""; // Éxito absoluto sin incidentes topológicos
 }
 
 
 QString MoleculaView::saveFileVisMol(const QString& ruta){
     // Control de seguridad inicial para evitar rutas vacías
-    if (ruta.isEmpty()) return "Debes especificar unja archivo para guardar los datos.";
+    if (ruta.isEmpty()) return "Debes especificar una ruta de archivo para guardar los datos.";
 
+    // Invocamos directamente al método estático unificado de DatosIO pasando el estado interno actual
     return DatosIO::saveVisMol(ruta, m_listaAtomos, m_listaEnlaces, m_comentario);
 }
+
 
 QString MoleculaView::saveFileMOPAC(const QString& ruta, const QString& argumentos){
 
@@ -844,23 +818,22 @@ QString MoleculaView::saveFileMOPAC(const QString& ruta, const QString& argument
     return ""; // Éxito absoluto en la persistencia del combo de archivos
 }
 
-QString MoleculaView::getTipoArchivo(const QString& ruta){
+TipoFormato MoleculaView::getTipoArchivo(const QString& ruta){
     // Devolvemos .out, .arc, .vismol, .dat, .xyz
     //
     // si primera palabra es SUMMARY OF             -> .arc
     // si existe  JOB ENDED NORMALLY y MOPAC DONE   -> .out
     // si existe [ATOMOS] y [ENLACES]               -> vismol
 
-    if (ruta.isEmpty()) return "*.*";
+    if (ruta.isEmpty()) return TipoFormato::NO_SE_SABE;
 
     QFile archivo(ruta);
     if (!archivo.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return "*.*";
+        return TipoFormato::NO_SE_SABE;
     }
 
     QTextStream entrada(&archivo);
 
-    // Variables de control basadas estrictamente en tus tokens
     bool esMopacArc     = false;
     bool tieneJobEnded  = false;
     bool tieneMopacDone = false;
@@ -871,59 +844,28 @@ QString MoleculaView::getTipoArchivo(const QString& ruta){
 
     int lineasLeidas = 0;
 
-    // REGLA 1: Evaluamos la primera línea del archivo de forma aislada
-    if (!entrada.atEnd()) {
-        QString primeraLinea = entrada.readLine().trimmed();
-        lineasLeidas++;
-
-        // Si empieza exactamente por la frase clave, es un .arc de cabeza
-        if (primeraLinea.startsWith("SUMMARY OF", Qt::CaseInsensitive)) {
-            esMopacArc = true;
-        }
-
-        // Evaluamos también las otras reglas por si fuera un archivo de una sola línea
-        if (primeraLinea.contains("JOB ENDED NORMALLY", Qt::CaseInsensitive)) tieneJobEnded = true;
-        if (primeraLinea.contains("MOPAC DONE", Qt::CaseInsensitive)) tieneMopacDone = true;
-        if (primeraLinea == "[ATOMOS]")  tieneAtomos = true;
-        if (primeraLinea == "[ENLACES]") tieneEnlaces = true;
-    }
-
-    // REGLA 2: Continuamos leyendo el resto del archivo para buscar los demás marcadores
-    // Acotado a 2000 líneas por eficiencia con archivos cuánticos masivos
+    // Unificamos toda la lectura en un solo bucle seguro
     while (!entrada.atEnd() && lineasLeidas < 2000) {
         QString linea = entrada.readLine().trimmed();
         lineasLeidas++;
 
-        if (linea.contains("JOB ENDED NORMALLY", Qt::CaseInsensitive)) {
-            tieneJobEnded = true;
-        }
-        if (linea.contains("MOPAC DONE", Qt::CaseInsensitive)) {
-            tieneMopacDone = true;
-        }
-        if (linea == "[ATOMOS]")  tieneAtomos = true;
-        if (linea == "[ENLACES]") tieneEnlaces = true;
-        if(lineasLeidas == 3 && linea.isEmpty()) linea3Vacia = true;
-        if(lineasLeidas == 4 && linea.isEmpty()) linea4Vacia = true;
+        if (linea.contains("SUMMARY OF", Qt::CaseInsensitive))          esMopacArc = true;
+        if (linea.contains("JOB ENDED NORMALLY", Qt::CaseInsensitive))  tieneJobEnded = true;
+        if (linea.contains("MOPAC DONE", Qt::CaseInsensitive))         tieneMopacDone = true;
+        if (linea == "[ATOMOS]")                                        tieneAtomos = true;
+        if (linea == "[ENLACES]")                                       tieneEnlaces = true;
+        if (lineasLeidas == 3 && linea.isEmpty())                       linea3Vacia = true;
+        if (lineasLeidas == 4 && linea.isEmpty())                       linea4Vacia = true;
     }
     archivo.close();
 
-    // =========================================================================
-    // MAQUINARIA DE DECISIÓN SEMÁNTICA (TUS REGLAS PURAS)
-    // =========================================================================
-    if (tieneAtomos && tieneEnlaces) {
-        return ".vismol";
-    }
-    if (tieneJobEnded || tieneMopacDone) {
-        return ".out";
-    }
-    if (esMopacArc) {
-        return ".arc";
-    }
-    if(linea3Vacia && !linea4Vacia){
-        return ".dat";
-    }
+    // Maquinaria de decisión jerárquica limpia
+    if (tieneAtomos && tieneEnlaces)        return TipoFormato::VISMOL;
+    if (esMopacArc)                         return TipoFormato::ARC;
+    if (tieneJobEnded || tieneMopacDone)    return TipoFormato::OUT;
+    if (linea3Vacia && !linea4Vacia)        return TipoFormato::DAT;
 
-    return "*.*";
+    return TipoFormato::NO_SE_SABE;
 }
 
 // =========================================================================
