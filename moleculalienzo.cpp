@@ -19,12 +19,15 @@ MoleculaLienzo::MoleculaLienzo(QWidget* parent)
 
     m_escena = new QGraphicsScene(this);
 
+    // ─── FIJAMOS EL ESPACIO DE TRABAJO CON ORIGEN CENTRAL INAMOVIBLE ───
+    m_escena->setSceneRect(-5000, -5000, 10000, 10000);
+
     this->setScene(m_escena);
 
     // Opciones estéticas profesionales para un renderizado de átomos nítido
     this->setRenderHint(QPainter::Antialiasing);
 
-    // Evita que aparezcan barras de scroll molestas si nos acercamos a los bordes
+    // Evita que aparezcan barras de scroll molestas
     this->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     this->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
@@ -32,9 +35,8 @@ MoleculaLienzo::MoleculaLienzo(QWidget* parent)
     m_anguloX = 0.0f;
     m_anguloY = 0.0f;
 
-    this->setMouseTracking(true); // Fuerza a la vista a escuchar el ratón continuamente
-    this->setDragMode(QGraphicsView::NoDrag); // Evita que Qt intente mover scrolls invisibles al arrastrar
-
+    this->setMouseTracking(true);
+    this->setDragMode(QGraphicsView::NoDrag);
 }
 
 MoleculaLienzo::~MoleculaLienzo(){
@@ -207,13 +209,15 @@ void MoleculaLienzo::mousePressEvent(QMouseEvent* mouseEv){
     m_ultimaPosRat = mouseEv->pos();
 
     if(m_view->getModoEditor() != MoleculaView::ModoRotacion3D) {
+        // Capturamos el punto exacto en píxeles puros de la escena
+        QPointF posClick = this->mapToScene(mouseEv->pos());
+
+        // ─── ELIMINADA LA DIVISIÓN: Mandamos píxeles puros directamente al Cerebro ───
         if(mouseEv->button() == Qt::LeftButton){
-            QPointF posClick = this->mapToScene(mouseEv->pos());
             m_view->setClick(QVector3D(posClick.x(), posClick.y(), 0.0f));
         }
         if(mouseEv->button() == Qt::RightButton){
-            QPointF posClickDerecho = this->mapToScene(mouseEv->pos());
-            m_view->setClickDerecho(QVector3D(posClickDerecho.x(), posClickDerecho.y(), 0.0f));
+            m_view->setClickDerecho(QVector3D(posClick.x(), posClick.y(), 0.0f));
         }
     }
     QGraphicsView::mousePressEvent(mouseEv);
@@ -240,5 +244,7 @@ void MoleculaLienzo::resizeEvent(QResizeEvent* event){
     QGraphicsView::resizeEvent(event);
     this->resetTransform();
     m_escena->update();
-    centerOn(0,0);
+
+    // ─── ANCLAMOS EL FOCO DE LA PANTALLA EN EL CENTRO REAL (0,0) ───
+    centerOn(0, 0);
 }
