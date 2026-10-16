@@ -295,6 +295,11 @@ void MoleculaView::simularMopac(){
 
     m_procesoMopac->setWorkingDirectory(folderTemporal);
 
+    // 3.5 ─── CABLE DE ARRANQUE: Forzar el refresco de la UI al iniciar el proceso
+    connect(m_procesoMopac, &QProcess::started, this, [this](){
+        setModoLienzo(m_modoLienzo);
+    });
+
     // 4. CONFIGURAMOS EL TEMPORIZADOR DE VOLCADO (1 SEGUNDO LECTURA PASIVA)
     QTimer* timerMonitor = new QTimer(this);
     connect(timerMonitor, &QTimer::timeout, this, [this, rutaOut]() {
@@ -741,11 +746,15 @@ void MoleculaView::setModoLienzo(const ModoLienzo& modoLienzo){
         }
     }
 
+    // 2.5 EVALUAMOS SI MOPAC ESTÁ CORRIENDO EN ESTE INSTANTE EXACTO
+    bool mopacCorriendo = (m_procesoMopac != nullptr && m_procesoMopac->state() != QProcess::NotRunning);
+
     // 3. Asignamos los estados de forma segura en nuestro contenedor oficial de clase
-    m_modoLienzo.estaIniciado = modoLienzo.estaIniciado;
-    m_modoLienzo.estaGuardado = guardadoReal;
-    m_modoLienzo.estaVacio    = vacioAhora;
-    m_modoLienzo.formato      = modoLienzo.formato;
+    m_modoLienzo.estaIniciado       = modoLienzo.estaIniciado;
+    m_modoLienzo.estaGuardado       = guardadoReal;
+    m_modoLienzo.estaVacio          = vacioAhora;
+    m_modoLienzo.formato            = modoLienzo.formato;
+    m_modoLienzo.estaMopacActivo    = mopacCorriendo;
 
     // 4. EMISIÓN CENTRALIZADA SINCRÓNICA
     emit modoEditorCambiado(m_modoActual);

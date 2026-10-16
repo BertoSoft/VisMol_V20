@@ -808,7 +808,7 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
     // El motor de cálculo exige que haya átomos en pantalla pero bloquea nuevas simulaciónes
     // si el archivo abierto ya corresponde a un resultado final cuántico compilado (.out)
     m_accionesCalculo.configurarMopac->setEnabled(!modoLienzo.estaVacio && modoLienzo.formato != TipoFormato::OUT && modoLienzo.formato != TipoFormato::ARC);
-    m_accionesCalculo.detenerMopac->setEnabled(m_accionesCalculo.configurarMopac->isEnabled());
+    m_accionesCalculo.detenerMopac->setEnabled(modoLienzo.estaMopacActivo);
 
     // =========================================================================
     // CAPA 3: HISTORIAL DINÁMICO (PILAS DE COMANDOS DESHACER / REHACER)

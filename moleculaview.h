@@ -48,6 +48,7 @@ public:
         bool            estaGuardado    = false;
         bool            estaIniciado    = false;
         TipoFormato     formato         = TipoFormato::NO_SE_SABE;
+        bool            estaMopacActivo = false;
     };
 
     // =========================================================================

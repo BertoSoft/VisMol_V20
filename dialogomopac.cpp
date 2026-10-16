@@ -36,7 +36,11 @@ void DialogoMopac::initUi() {
     m_comboMetodo->addItems({"AM1", "PM3", "MNDO"});
 
     m_comboTarea = new QComboBox(this);
-    m_comboTarea->addItems({tr("Optimización Geométrica"), tr("Modos Vibracionales (FORCE)")});
+    m_comboTarea->addItems({
+        tr("Optimización Geométrica (Solo Final)"),  // Índice 0
+        tr("Optimización Geométrica Detallada (LARGE)"), // Índice 1
+        tr("Modos Vibracionales (FORCE)")            // Índice 2
+    });
 
     m_checkPrecision = new QCheckBox(tr("Convergencia Estricta (PRECISE)"), this);
     m_checkPrecision->setChecked(true);
@@ -84,8 +88,21 @@ void DialogoMopac::initUi() {
 QString DialogoMopac::construirKeywords() {
     QString cmdKeywords = m_comboMetodo->currentText(); // "AM1", "PM3", etc.
 
-    if (m_comboTarea->currentIndex() == 1) {
-        cmdKeywords += " FORCE"; // Si elige la tarea de frecuencias, inyectamos su token cuántico
+    // Evaluamos la intención del usuario según el nuevo orden del combo
+    switch (m_comboTarea->currentIndex()) {
+    case 0:
+        // Optimización estándar: no añadimos nada, MOPAC optimiza por defecto
+        break;
+
+    case 1:
+        // Optimización detallada: inyectamos LARGE para escupir todas las geometrías intermedias
+        cmdKeywords += " LARGE AUX(COMP,XP,XS,XW)";
+        break;
+
+    case 2:
+        // Tarea espectroscópica de frecuencias
+        cmdKeywords += " FORCE";
+        break;
     }
 
     if (m_checkPrecision->isChecked()) {
