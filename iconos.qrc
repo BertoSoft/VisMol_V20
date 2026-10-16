@@ -25,5 +25,6 @@
         <file>iconos/guardar_como.png</file>
         <file>iconos/ver_texto.png</file>
         <file>iconos/frecuencias.png</file>
+        <file>iconos/detener.png</file>
     </qresource>
 </RCC>

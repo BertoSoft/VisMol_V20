@@ -18,7 +18,8 @@ public:
     static QString saveVisMol(const QString& ruta, const QVector<Atomo>& m_listaAtomos, const QVector<Enlace>& m_listaEnlaces, const QString& comentario);
     static QString saveMOPAC(const QString& ruta, const QVector<Atomo>& m_listaAtomos,  const QString& comentario, const QString& argumentos);
 
-    // Firma corregida: pasamos referencias directas a objetos reales y añadimos el flag de formato
+    static QString leerLogTexto(const QString& ruta);
+
 
 private:
     static inline const float FACTOR_ANGSTROM = 100.0f;

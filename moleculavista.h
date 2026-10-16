@@ -61,6 +61,7 @@ private slots:
     void rehacer();
     void limpiarLienzo();
     void configurarMopac();
+    void detenerMopac();
     void mostrarFrecuencias();
     void mostrarConsolaLog();
 
@@ -104,6 +105,7 @@ private:
 
     struct AccionesCalculo {
         QAction* configurarMopac = nullptr;
+        QAction* detenerMopac    = nullptr;
     } m_accionesCalculo;
 
     struct AccionesAnalisis {

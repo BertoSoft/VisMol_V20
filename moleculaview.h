@@ -5,6 +5,7 @@
 #include <QString>
 #include <QVector>
 #include <QVector3D>
+#include <QProcess>
 
 // =========================================================================
 // ZONA: ESTRUCTURAS DE DATOS GLOBALES (MODELO QUÍMICO BASE)
@@ -81,6 +82,8 @@ public:
 public:
     void        setClick(const QVector3D& posClick);
     void        setClickDerecho(const QVector3D& posClickDerecho);
+    void        simularMopac();
+    void        detenerSimularMopac();
 
     // =========================================================================
     // 5. ZONA: FUNCIONES PÚBLICAS (GESTOR DE MEMORIA Y ELIMINACIÓN)
@@ -179,6 +182,8 @@ private:
     QString                 m_comentario;
     QString                 m_argumentos;
     QString                 m_rutaArchivoActual;
+    QVector3D               m_ultimaPosRat;
+    QProcess*               m_procesoMopac; // Puntero al subproceso de fondo de MOPAC
 
     int                     m_contadorIds         = 0;
     int                     m_idAtomoSeleccionado = -1;

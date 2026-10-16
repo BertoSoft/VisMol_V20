@@ -23,6 +23,7 @@ protected:
 
     void mousePressEvent(QMouseEvent* mouseEv) override;
     void mouseMoveEvent(QMouseEvent* mouseEv) override; // <-- Captura el arrastre dinámico
+    void mouseReleaseEvent(QMouseEvent* mouseEv) override;
     void resizeEvent(QResizeEvent* event) override;
 
 private:
@@ -34,6 +35,8 @@ private:
     // =========================================================================
     float   m_anguloX      = 0.0f;  // Rotación vertical (Pitch)
     float   m_anguloY      = 0.0f;  // Rotación horizontal (Yaw)
+    float   m_deltaX       = 0.0f;
+    float   m_deltaY       = 0.0f;
     QPoint  m_ultimaPosRat;         // Guarda el último píxel del cursor para calcular el movimiento (Delta)
 };
 

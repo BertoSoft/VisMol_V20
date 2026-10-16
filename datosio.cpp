@@ -402,7 +402,23 @@ QString DatosIO::parseOUT(
         return "Error: Se localizó el bloque geométrico final optimizado pero no se pudieron parsear sus átomos.";
     }
 
-    return ""; // Éxito absoluto
+    // =========================================================================
+    // ─── ANCLAJE GEOMÉTRICO: RE-CENTRADO ABSOLUTO DEL MODELO EN EL VISOR ───
+    // Como MOPAC altera el centro de masas, calculamos el desvío y devolvemos
+    // la molécula al origen geométrico del lienzo (0,0,0) de píxeles puros.
+    // =========================================================================
+    QVector3D acumulador(0.0f, 0.0f, 0.0f);
+    for (const Atomo& a : m_listaAtomos) {
+        acumulador += a.posicion;
+    }
+    QVector3D centroDeMasasMopac = acumulador / m_listaAtomos.size();
+
+    // Restamos el centro de masas a cada átomo para re-centrar el sistema de coordenadas
+    for (Atomo& a : m_listaAtomos) {
+        a.posicion -= centroDeMasasMopac;
+    }
+
+    return ""; // Éxito absoluto y corregido
 }
 
 // PARSER .ARC: Archivo compacto de resumen definitivo de simulación
@@ -451,5 +467,27 @@ QString DatosIO::parseARC(
         return "Error: No se pudieron parsear los átomos de la geometría final.";
     }
 
+    // ─── INYECCIÓN DE SEGURIDAD GEOMÉTRICA PARA EL ARCHIVO .ARC ───
+    QVector3D acumulador(0.0f, 0.0f, 0.0f);
+    for (const Atomo& a : m_listaAtomos) {
+        acumulador += a.posicion;
+    }
+    QVector3D centroDeMasasArc = acumulador / m_listaAtomos.size();
+
+    for (Atomo& a : m_listaAtomos) {
+        a.posicion -= centroDeMasasArc;
+    }
+
     return ""; // Éxito
+}
+
+QString DatosIO::leerLogTexto(const QString& ruta) {
+    QFile archivo(ruta);
+    if (!archivo.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return ""; // Fallback defensivo: si MOPAC aún no ha escrito nada, devuelve vacío
+    }
+    QTextStream entrada(&archivo);
+    QString contenido = entrada.readAll();
+    archivo.close();
+    return contenido;
 }

@@ -129,4 +129,8 @@ void DialogoMopac::alExportarEntrada() {
 
 void DialogoMopac::alLanzarSimulacion() {
     // LO QUE VENDRÁ: Aquí notificaremos a m_vista que el usuario quiere calcular en vivo.
+    *m_argumentos = construirKeywords();
+    *m_comentario = m_txtComentario->text().trimmed();
+
+    this->done(2); // 2 significa que el usuario quiere SIMULAR
 }

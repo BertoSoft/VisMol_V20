@@ -7,6 +7,9 @@
 #include <QTextStream>
 #include <QRegularExpression>
 #include <QFileInfo>
+#include <QDir>
+#include <QProcess>
+#include <QTimer>
 
 
 // =========================================================================
@@ -26,7 +29,17 @@ MoleculaView::MoleculaView(QObject *parent)
 }
 
 MoleculaView::~MoleculaView(){
-
+    // ─── SEGURIDAD EN EL CIERRE DE LA APLICACIÓN ───
+    // Si el usuario cierra el visor molecular por completo, nos aseguramos
+    // de limpiar la RAM y fulminar el proceso de fondo para no dejar zombis en la CPU.
+    if (m_procesoMopac) {
+        if (m_procesoMopac->state() != QProcess::NotRunning) {
+            m_procesoMopac->kill(); // Cierre fulminante e instantáneo sin esperas
+        }
+        // No hace falta delete porque al pasarle 'this' como padre, Qt lo destruye solo,
+        // pero dejar el puntero a nulo es una buena práctica de higiene.
+        m_procesoMopac = nullptr;
+    }
 }
 
 
@@ -261,6 +274,88 @@ void MoleculaView::setClickDerecho(const QVector3D& posClickDerecho){
     }
 }
 
+void MoleculaView::simularMopac(){
+    if (m_listaAtomos.isEmpty()) return;
+
+    QString folderTemporal = QDir::tempPath();
+    QString baseName = "vismol_calc";
+    QString rutaTemporalBase = folderTemporal + "/" + baseName;
+    QString rutaDat = rutaTemporalBase + ".dat";
+    QString rutaOut = rutaTemporalBase + ".out";
+
+    // 1. PISTA LIMPIA: Borramos los archivos de la simulación anterior
+    QFile::remove(rutaDat);
+    QFile::remove(rutaOut);
+
+    // 2. ESCRIBIMOS LA ENTRADA CUÁNTICA
+    if (!saveFileMOPAC(rutaDat, m_argumentos).isEmpty()) return;
+
+    // 3. ASIGNACIÓN SEGURA REUTILIZANDO LA VARIABLE DE CLASE
+    m_procesoMopac = new QProcess(this);
+
+    m_procesoMopac->setWorkingDirectory(folderTemporal);
+
+    // 4. CONFIGURAMOS EL TEMPORIZADOR DE VOLCADO (1 SEGUNDO LECTURA PASIVA)
+    QTimer* timerMonitor = new QTimer(this);
+    connect(timerMonitor, &QTimer::timeout, this, [this, rutaOut]() {
+        QString textoActual = DatosIO::leerLogTexto(rutaOut);
+        if (!textoActual.isEmpty()) {
+            emit notificaContenidoLog(textoActual);
+        }
+    });
+
+    // 5. MÁQUINA DE EVENTOS AL TERMINAR (ESTANCA Y SIN RECURSIVIDAD)
+    connect(m_procesoMopac, &QProcess::finished, this, [this, rutaTemporalBase, rutaOut, timerMonitor](int exitCode, QProcess::ExitStatus exitStatus) {
+
+        // Frenamos y destruimos el reloj de lectura inmediatamente al finalizar
+        timerMonitor->stop();
+        timerMonitor->deleteLater();
+
+        emit notificarMensajeEstado(tr(" Simulación cuántica finalizada."));
+
+        if (exitStatus == QProcess::NormalExit && exitCode == 0) {
+            // Último volcado definitivo para el log de la UI
+            emit notificaContenidoLog(DatosIO::leerLogTexto(rutaOut));
+
+            // CARGAMOS LA GEOMETRÍA OPTIMIZADA RECENTRADA CON ENLACES EN LA RAM
+            abrirArchivo(rutaOut);
+        } else {
+            emit notificaContenidoLog(tr(" > ❌ ERROR: MOPAC abortó o no generó el archivo .out."));
+        }
+
+        // LIMPIEZA DE RESIDUOS CRÍTICOS EN DISCO
+        QFile::remove(rutaTemporalBase + ".dat");
+        QFile::remove(rutaTemporalBase + ".out");
+        m_rutaArchivoActual = "";
+    });
+
+    // 6. LANZAMIENTO CIEGO ASÍNCRONO INDESTRUCTIBLE
+    // MOPAC exige estrictamente solo el nombre base, sin la extensión ".dat"
+    m_procesoMopac->start("mopac", QStringList() << baseName);
+    m_procesoMopac->closeWriteChannel(); // Bloquea esperas de teclado accidentales
+
+    // Arrancamos el temporizador justo después de lanzar el proceso de fondo
+    timerMonitor->start(100);
+
+}
+
+void MoleculaView::detenerSimularMopac() {
+    // Verificamos que el puntero sea válido y que el proceso realmente se esté ejecutando
+    if (m_procesoMopac && m_procesoMopac->state() != QProcess::NotRunning) {
+
+        // 1. Solicitamos un cierre elegante al sistema operativo
+        m_procesoMopac->terminate();
+
+        // 2. Red de seguridad: si tarda más de 2 segundos en responder, lo forzamos (kill)
+        if (!m_procesoMopac->waitForFinished(2000)) {
+            m_procesoMopac->kill();
+        }
+
+        emit notificarMensajeEstado(tr(" Simulación cancelada por el usuario."));
+        emit notificaContenidoLog(tr(" > ❌ SIMULACIÓN ABORTADA."));
+    }
+}
+
 // =========================================================================
 // 5. ZONA: FUNCIONES PÚBLICAS (GESTOR DE MEMORIA Y ELIMINACIÓN)
 // =========================================================================
@@ -418,6 +513,46 @@ void MoleculaView::procesarClickDibujoAtomo(const QVector3D& posClick) {
 }
 
 void MoleculaView::procesarClickSeleccion(const QVector3D& posClick) {
+    // ─── PASO 1: SI EL ANCLA ESTÁ FUERA DE LA ESCENA (GESTO DE PULSAR) ───
+    if (m_ultimaPosRat.x() < -5000.0f) {
+        m_ultimaPosRat = posClick; // Registramos la coordenada de la escena inicial de partida
+        return;                      // Salimos limpiamente, el arrastre óptico toma el control
+    }
+
+    // ─── PASO 2: SI EL ANCLA YA ERA VÁLIDA (GESTO DE SOLTAR) ───
+    if (m_ultimaPosRat.x() >= -5000.0f) {
+        if (!m_listaAtomos.isEmpty()) {
+
+            // ─── TU DETECCIÓN QUIRÚRGICA: RESTA EXPLÍCITA COMPONENTE A COMPONENTE ───
+            // Extraemos los diferenciales planos puros de la pantalla calculando las diferencias
+            float deltaX = posClick.x() - m_ultimaPosRat.x();
+            float deltaY = posClick.y() - m_ultimaPosRat.y();
+
+            // Construimos el vector tridimensional real de traslación manteniendo Z neutro
+            QVector3D vectorTraslacionFinal(deltaX, deltaY, 0.0f);
+
+            // Filtro antipánico de ruido mecánico del hardware (Umbral de 3 píxeles/unidades)
+            if (vectorTraslacionFinal.length() > 3.0f) {
+
+                // B. Guardamos una única foto pura del pasado original en el historial (Ctrl+Z)
+                pushAtras();
+
+                // C. MUTACIÓN REAL DE COORDENADAS: Movemos todos los átomos de golpe en la RAM
+                for (Atomo& atomo : m_listaAtomos) {
+                    atomo.posicion += vectorTraslacionFinal;
+                }
+
+                // D. Activamos de forma oficial el asterisco de cambios sin guardar en la ventana
+                ModoLienzo modoTmp = m_modoLienzo;
+                modoTmp.estaGuardado = false;
+                setModoLienzo(modoTmp);
+            }
+        }
+
+        // ─── PASO 3: PROTOCOLO DE RESETEO DE TRANSACCIÓN ───
+        // Restauramos la coordenada de control fuera de mapa para el próximo arrastre
+        m_ultimaPosRat = QVector3D(-10000.0f, -10000.0f, -10000.0f);
+    }
 }
 
 void MoleculaView::procesarClickCrearEnlace(const QVector3D& posClick) {
@@ -528,6 +663,10 @@ void MoleculaView::resetVariablesClase(){
     m_atomoActivo         = "C";
     m_modoActual          = ModoSeleccion;
 
+    //4. Iniciamos a nulo el m_ultimaPosRat
+    m_ultimaPosRat = QVector3D(-10000.0f, -10000.0f, -10000.0f);
+
+    m_procesoMopac = nullptr;
 }
 
 void MoleculaView::pushAtras() {
@@ -617,30 +756,41 @@ void MoleculaView::setModoLienzo(const ModoLienzo& modoLienzo){
 }
 
 void MoleculaView::setMensajeEstado(){
-    // Si el proyecto NO ha sido iniciado o está en letargo, mandamos el texto de bloqueo
-    if (!m_modoLienzo.estaIniciado) {
-        emit notificarMensajeEstado(tr(" Proyecto Vacío. Cree un nuevo lienzo o abra un archivo para comenzar."));
+    // ─── PRIORIDAD 1: MONITOREO DEL MOTOR EN VIVO ───
+    // Si el proceso existe y está corriendo, la barra de estado debe gritarlo con prioridad absoluta
+    if (m_procesoMopac && m_procesoMopac->state() != QProcess::NotRunning) {
+        emit notificarMensajeEstado(tr(" 🔬 EJECUTANDO SIMULACIÓN CUÁNTICA MOPAC... Detenga el proceso si es necesario."));
         return;
     }
 
-    // Evaluamos la herramienta activa actual en el negocio
+    // ─── PRIORIDAD 2: ESTADO DEL LIENZO VACÍO ───
+    if (!m_modoLienzo.estaIniciado || m_modoLienzo.estaVacio) {
+        emit notificarMensajeEstado(tr(" 📂 Proyecto Vacío. Cree un nuevo lienzo o abra un archivo molecular para comenzar."));
+        return;
+    }
+
+    // ─── PRIORIDAD 3: HERRAMIENTA ACTIVA + ESTADO DE CAMBIOS ───
+    QString estadoGuardado = m_modoLienzo.estaGuardado ? tr("Sincronizado con disco")
+                                                       : tr("⚠️ Cambios sin guardar");
+
+    QString textoHerramienta = "";
     switch(m_modoActual) {
     case MoleculaView::ModoSeleccion:
-        emit notificarMensajeEstado(tr(" Herramienta activa: Modo Seleccion (Puntero Neutro)."));
+        textoHerramienta = tr("Modo Selección (Arrastre átomos para trasladar la estructura)");
         break;
-
     case MoleculaView::ModoDibujo:
-        emit notificarMensajeEstado(tr(" Herramienta activa: Dibujando Átomo de %1.").arg(m_atomoActivo));
+        textoHerramienta = tr("Modo Dibujo: Listo para colocar un átomo de %1").arg(m_atomoActivo);
         break;
-
     case MoleculaView::ModoCrearEnlace:
-        emit notificarMensajeEstado(tr(" Herramienta activa: Modo Enlace Covalente habilitado."));
+        textoHerramienta = tr("Modo Enlace: Seleccione dos átomos para unirlos covalentemente");
         break;
-
     case MoleculaView::ModoRotacion3D:
-        emit notificarMensajeEstado(tr(" Herramienta activa: Modo Rotación y Vista 3D."));
+        textoHerramienta = tr("Modo Rotación 3D: Arrastre en el lienzo para orbitar el espacio cuántico");
         break;
     }
+
+    // Unificamos toda la información contextual en una sola cadena limpia
+    emit notificarMensajeEstado(QString(" 🟢 %1 | [%2]").arg(textoHerramienta).arg(estadoGuardado));
 }
 
 QString MoleculaView::loadFileVisMol(const QString& ruta){

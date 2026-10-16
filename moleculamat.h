@@ -18,6 +18,7 @@ public:
      * @return QPointF Coordenada (X, Y) lista para ser dibujada en el lienzo.
      */
     static QPointF rotarPunto(const QVector3D& posReal, float anguloX, float anguloY);
+    static QPointF moverPunto(const QVector3D& posReal, float deltaX, float deltaY);
 };
 
 #endif // MOLECULAMAT_H

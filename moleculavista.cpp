@@ -73,11 +73,31 @@ void MoleculaVista::setMoleculaView(MoleculaView* view){
 // =========================================================================
 
 QString MoleculaVista::dialogoAbrirArchivo(){
+    // 1. Creamos el filtro global que junta todas tus extensiones permitidas
+    QString filtroGlobal = tr("Proyectos VisMol (*.vismol)");
+
+    // 2. Creamos los filtros individuales desglosados
+    QString filtroVismol = tr("Todos los archivos soportados (*.vismol *.out *.arc *.dat *.xyz)");
+    QString filtroOut    = tr("Ficheros de salida MOPAC (*.out)");
+    QString filtroArc    = tr("Archivos de resumen MOPAC (*.arc)");
+    QString filtroDat    = tr("Entradas de MOPAC (*.dat)");
+    QString filtroXyz    = tr("Coordenadas Cartesianas (*.xyz)");
+    QString filtroTodos  = tr("Todos los archivos (*)");
+
+    // 3. Concatenamos TODO usando el separador oficial ";;" de Qt
+    QString filtrosCombinados = filtroGlobal + ";;"
+                                + filtroVismol + ";;"
+                                + filtroOut    + ";;"
+                                + filtroArc    + ";;"
+                                + filtroDat    + ";;"
+                                + filtroXyz    + ";;"
+                                + filtroTodos;
+
     return QFileDialog::getOpenFileName(
         this,
         tr("Abrir Proyecto VisMol"),
         "",
-        tr("Archivos de MOPAC / VisMol / XYZ (*.dat *.out *.arc *.vismol *.xyz)")
+        filtrosCombinados
         );
 }
 
@@ -254,6 +274,10 @@ void MoleculaVista::initMenu(){
     m_accionesCalculo.configurarMopac = subMenuMopac->addAction(tr("Configurar y Lanzar Simulación..."), this, &MoleculaVista::configurarMopac);
     m_accionesCalculo.configurarMopac->setIcon(QIcon(":/iconos/configurar.png"));
 
+    // ─── PASO 1: CREACIÓN DE LA ACCIÓN DE PARADA ───
+    m_accionesCalculo.detenerMopac = subMenuMopac->addAction(tr("Detener Simulación MOPAC"), this, &MoleculaVista::detenerMopac);
+    m_accionesCalculo.detenerMopac->setIcon(QIcon(":/iconos/detener.png")); // Asegúrate de tener este .png en tus recursos
+
     // =========================================================================
     // 4. PASO CIENTÍFICO: INTERPRETACIÓN DE RESULTADOS (ANÁLISIS)
     // =========================================================================
@@ -296,6 +320,7 @@ void MoleculaVista::initToolBarSuperior(){
     m_barraProyecto->addSeparator();
 
     m_barraProyecto->addAction(m_accionesCalculo.configurarMopac);
+    m_barraProyecto->addAction(m_accionesCalculo.detenerMopac);
 }
 
 void MoleculaVista::initToolBarIzda(){
@@ -707,11 +732,18 @@ void MoleculaVista::configurarMopac(){
     DialogoMopac dialogo(argumentos, comentario, this);
 
     // 2. Bloqueamos la interfaz principal y mostramos el diálogo en modo modal
+    m_lblEstadoTexto->setText(tr(" 📋 Configurando parámetros de optimización cuántica en el diálogo..."));
     // exec() se queda esperando pacientemente en silencio a que el usuario pulse "Exportar", "Lanzar" o "Cancelar"
     int resultado = dialogo.exec();
 
-    if(resultado == QDialog::Rejected) return;
+    // ─── ¡NUEVO!: CAPTURAMOS LA CANCELACIÓN O EL BOTÓN CERRAR ───
+    if (resultado == QDialog::Rejected) {
+        // Le ordenamos al cerebro abortar cualquier ejecución en vivo activa de MOPAC
+        m_view->detenerSimularMopac();
+        return;
+    }
 
+    // ─── ESCENARIO 1: EL USUARIO QUIERE GUARDAR ARCHIVO:DAT  ───
     if(resultado == 1 ){
         // exportar
         QString ruta = dialogoGuardarArchivo(".dat");
@@ -721,12 +753,26 @@ void MoleculaVista::configurarMopac(){
             m_view->setArgumentos(argumentos);
             m_view->guardarArchivo(ruta);
         }
+
     }
+    // ─── ESCENARIO 2: EL USUARIO QUIERE LANZAR LA SIMULACIÓN EN VIVO (SIN PEDIR RUTA) ───
     else if(resultado == 2){
-        // Lamzar simulacion
+        if(m_view){
+            // 1. Volcamos los datos recogidos del diálogo directamente al cerebro
+            m_view->setComentario(comentario);
+            m_view->setArgumentos(argumentos);
+
+            // 3. Ordenamos al cerebro arrancar la simulación de forma directa
+            m_view->simularMopac();
+        }
     }
+}
 
-
+void MoleculaVista::detenerMopac(){
+    // La vista no mata procesos directamente, le delega la orden de negocio al cerebro
+    if (m_view) {
+        m_view->detenerSimularMopac();
+    }
 }
 
 void MoleculaVista::mostrarFrecuencias(){}
@@ -762,6 +808,7 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
     // El motor de cálculo exige que haya átomos en pantalla pero bloquea nuevas simulaciónes
     // si el archivo abierto ya corresponde a un resultado final cuántico compilado (.out)
     m_accionesCalculo.configurarMopac->setEnabled(!modoLienzo.estaVacio && modoLienzo.formato != TipoFormato::OUT && modoLienzo.formato != TipoFormato::ARC);
+    m_accionesCalculo.detenerMopac->setEnabled(m_accionesCalculo.configurarMopac->isEnabled());
 
     // =========================================================================
     // CAPA 3: HISTORIAL DINÁMICO (PILAS DE COMANDOS DESHACER / REHACER)
