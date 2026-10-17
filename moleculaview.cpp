@@ -150,6 +150,16 @@ QString MoleculaView::abrirArchivo(const QString& ruta){
         // Redirigimos de forma unificada hacia el cargador transaccional unificado para MOPAC
         respuesta = loadFileMOPAC(ruta, formatoDeteccion);
     }
+    else if(formatoDeteccion == TipoFormato::AUX){
+        // Redirigimos a archivos .AUX
+
+
+
+
+
+
+
+    }
     else {
         // Si devuelve "*.*" o un formato no mapeado por las firmas, abortamos elegantemente
         return tr("El archivo seleccionado no contiene ninguna firma molecular o formato reconocido por el sistema.");
@@ -982,7 +992,8 @@ TipoFormato MoleculaView::getTipoArchivo(const QString& ruta){
     //
     // si primera palabra es SUMMARY OF             -> .arc
     // si existe  JOB ENDED NORMALLY y MOPAC DONE   -> .out
-    // si existe [ATOMOS] y [ENLACES]               -> vismol
+    // si existe [ATOMOS] y [ENLACES]               -> .vismol
+    //si existe ATOM_X_UPDATED:ANGSTROMS            -> .aux
 
     if (ruta.isEmpty()) return TipoFormato::NO_SE_SABE;
 
@@ -993,13 +1004,14 @@ TipoFormato MoleculaView::getTipoArchivo(const QString& ruta){
 
     QTextStream entrada(&archivo);
 
-    bool esMopacArc     = false;
-    bool tieneJobEnded  = false;
-    bool tieneMopacDone = false;
-    bool tieneAtomos    = false;
-    bool tieneEnlaces   = false;
-    bool linea3Vacia    = false;
-    bool linea4Vacia    = false;
+    bool esMopacArc         = false;
+    bool tieneJobEnded      = false;
+    bool tieneMopacDone     = false;
+    bool tieneAtomXUpdated  = false;
+    bool tieneAtomos        = false;
+    bool tieneEnlaces       = false;
+    bool linea3Vacia        = false;
+    bool linea4Vacia        = false;
 
     int lineasLeidas = 0;
 
@@ -1008,13 +1020,14 @@ TipoFormato MoleculaView::getTipoArchivo(const QString& ruta){
         QString linea = entrada.readLine().trimmed();
         lineasLeidas++;
 
-        if (linea.contains("SUMMARY OF", Qt::CaseInsensitive))          esMopacArc = true;
-        if (linea.contains("JOB ENDED NORMALLY", Qt::CaseInsensitive))  tieneJobEnded = true;
-        if (linea.contains("MOPAC DONE", Qt::CaseInsensitive))         tieneMopacDone = true;
-        if (linea == "[ATOMOS]")                                        tieneAtomos = true;
-        if (linea == "[ENLACES]")                                       tieneEnlaces = true;
-        if (lineasLeidas == 3 && linea.isEmpty())                       linea3Vacia = true;
-        if (lineasLeidas == 4 && linea.isEmpty())                       linea4Vacia = true;
+        if (linea.contains("SUMMARY OF", Qt::CaseInsensitive))                  esMopacArc          = true;
+        if (linea.contains("JOB ENDED NORMALLY", Qt::CaseInsensitive))          tieneJobEnded       = true;
+        if (linea.contains("ATOM_X_UPDATED:ANGSTROMS", Qt::CaseInsensitive))    tieneAtomXUpdated   = true;
+        if (linea.contains("MOPAC DONE", Qt::CaseInsensitive))                  tieneMopacDone      = true;
+        if (linea == "[ATOMOS]")                                                tieneAtomos         = true;
+        if (linea == "[ENLACES]")                                               tieneEnlaces        = true;
+        if (lineasLeidas == 3 && linea.isEmpty())                               linea3Vacia         = true;
+        if (lineasLeidas == 4 && linea.isEmpty())                               linea4Vacia         = true;
     }
     archivo.close();
 
@@ -1023,6 +1036,7 @@ TipoFormato MoleculaView::getTipoArchivo(const QString& ruta){
     if (esMopacArc)                         return TipoFormato::ARC;
     if (tieneJobEnded || tieneMopacDone)    return TipoFormato::OUT;
     if (linea3Vacia && !linea4Vacia)        return TipoFormato::DAT;
+    if(tieneAtomXUpdated)                   return TipoFormato::AUX;
 
     return TipoFormato::NO_SE_SABE;
 }

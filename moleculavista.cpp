@@ -77,16 +77,19 @@ QString MoleculaVista::dialogoAbrirArchivo(){
     QString filtroGlobal = tr("Proyectos VisMol (*.vismol)");
 
     // 2. Creamos los filtros individuales desglosados
-    QString filtroVismol = tr("Todos los archivos soportados (*.vismol *.out *.arc *.dat *.xyz)");
-    QString filtroOut    = tr("Ficheros de salida MOPAC (*.out)");
-    QString filtroArc    = tr("Archivos de resumen MOPAC (*.arc)");
+    QString filtroVismol = tr("Todos los archivos soportados (*.vismol *.out *.arc *.aux *.dat *.xyz)");
     QString filtroDat    = tr("Entradas de MOPAC (*.dat)");
+    QString filtroOut    = tr("Ficheros de salida MOPAC (*.out)");
+    QString filtroAux    = tr("Ficheros de salida MOPAC (*.aux)");
+    QString filtroArc    = tr("Archivos de resumen MOPAC (*.arc)");
     QString filtroXyz    = tr("Coordenadas Cartesianas (*.xyz)");
     QString filtroTodos  = tr("Todos los archivos (*)");
 
     // 3. Concatenamos TODO usando el separador oficial ";;" de Qt
     QString filtrosCombinados = filtroGlobal + ";;"
                                 + filtroVismol + ";;"
+                                + filtroDat    + ";;"
+                                + filtroAux    + ";;"
                                 + filtroOut    + ";;"
                                 + filtroArc    + ";;"
                                 + filtroDat    + ";;"

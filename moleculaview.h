@@ -15,6 +15,7 @@ enum TipoFormato {
     DAT,
     OUT,
     ARC,
+    AUX,
     NO_SE_SABE
 };
 
