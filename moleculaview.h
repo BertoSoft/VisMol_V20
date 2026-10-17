@@ -16,6 +16,7 @@ enum TipoFormato {
     OUT,
     ARC,
     AUX,
+    FORCE_OUT,
     NO_SE_SABE
 };
 
@@ -29,6 +30,25 @@ struct Enlace {
     int id_atomo1;
     int id_atomo2;
     int orden; // 1 = Simple, 2 = Doble, 3 = Triple
+};
+
+struct Trayectoria {
+    QVector<Atomo>  listaAtomos;
+    QVector<Enlace> listaEnlaces;
+};
+
+// Representa el vector de desplazamiento cartesiano para un átomo en una vibración específica
+struct Vibraciones {
+    int id_atomo;      // Enlace con el átomo correspondiente
+    float dx;          // Desplazamiento en el eje X
+    float dy;          // Desplazamiento en el eje Y
+    float dz;          // Desplazamiento en el eje Z
+};
+
+// Representa la ficha cuántica completa de una frecuencia de espectroscopía IR
+struct Frecuencias {
+    float                   frecuencia;     // El valor numérico en cm⁻¹ (ej: 1650.1)
+    QVector<Vibraciones>    vibraciones;    // Un vector de desplazamiento por cada átomo de la molécula
 };
 
 class MoleculaView : public QObject
@@ -86,6 +106,8 @@ public:
     void        setClickDerecho(const QVector3D& posClickDerecho);
     void        simularMopac();
     void        detenerSimularMopac();
+    void        setFotogramaTrayectoria(int indiceFotograma);
+    void        setFrecuenciaActiva(int indice);
 
     // =========================================================================
     // 5. ZONA: FUNCIONES PÚBLICAS (GESTOR DE MEMORIA Y ELIMINACIÓN)
@@ -100,16 +122,18 @@ public:
     // 6. ZONA: GETTERS DE ACCESO A DATOS (ESTRICTO SOLO LECTURA)
     // =========================================================================
 public:
-    ModoEditor      getModoEditor();
-    QString         getSimboloAtomoActivo();
-    QVector<Atomo>  getListaAtomos();
-    QVector<Enlace> getListaEnlaces();
-    int             getIdAtomoSeleccionado();
-    ModoLienzo      getModoLienzo();
-    QString         getComentario();
-    bool            hayPasado() const;
-    bool            hayFuturo() const;
-    QString         getRutaArchivoActual();
+    ModoEditor              getModoEditor();
+    QString                 getSimboloAtomoActivo();
+    QVector<Atomo>          getListaAtomos();
+    QVector<Enlace>         getListaEnlaces();
+    int                     getIdAtomoSeleccionado();
+    ModoLienzo              getModoLienzo();
+    QString                 getComentario();
+    bool                    hayPasado() const;
+    bool                    hayFuturo() const;
+    QString                 getRutaArchivoActual();
+    int                     getTamTrayectoria();
+    QVector<Frecuencias>    getListaFrecuencias();
 
     // =========================================================================
     // 7. ZONA: SEÑALES DE NOTIFICACIÓN (MÓVILES DE SINCRONIZACIÓN VISTA-MODELO)
@@ -150,6 +174,8 @@ private:
     TipoFormato getTipoArchivo(const QString& ruta); // Tu clasificador inteligente de tokens
     QString     loadFileVisMol(const QString& ruta); // Oculto y protegido de la interfaz gráfica
     QString     loadFileMOPAC(const QString& ruta, TipoFormato formato);  // Oculto y protegido de la interfaz gráfica
+    QString     loadFileMopacAux(const QString& ruta);
+    QString     loadFileMopacForce(const QString& ruta);
     QString     saveFileVisMol(const QString& ruta);
     QString     saveFileMOPAC(const QString& ruta, const QString& argumentos);
 
@@ -181,6 +207,12 @@ private:
 
     QVector<Atomo>          m_listaAtomos;
     QVector<Enlace>         m_listaEnlaces;
+    QVector<Trayectoria>    m_trayectoria;
+    int                     m_tam_trayectoria;
+
+    QVector<Frecuencias>    m_listaFrecuencias;  // Almacena todas las frecuencias y sus vectores
+    int                     m_frecuenciaActiva;  // Guarda el índice (-1 si ninguna, o de 0 a N-1)
+
     QString                 m_comentario;
     QString                 m_argumentos;
     QString                 m_rutaArchivoActual;

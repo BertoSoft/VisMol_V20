@@ -1,7 +1,36 @@
 #include "datosio.h"
+
 #include <QFile>
 #include <QTextStream>
 #include <QRegularExpression>
+#include <QFileInfo>
+
+QString DatosIO::leerLogTexto(const QString& ruta) {
+    QFile archivo(ruta);
+    if (!archivo.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return ""; // Fallback defensivo: si MOPAC aún no ha escrito nada, devuelve vacío
+    }
+    QTextStream entrada(&archivo);
+    QString contenido = entrada.readAll();
+    archivo.close();
+    return contenido;
+}
+
+QString DatosIO::loadFrecuencias(const QString& ruta, QVector<Frecuencias>& m_listaFrecuencias) {
+    QFile archivo(ruta);
+    if (!archivo.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString("Error: No se pudo abrir el archivo de frecuencias %1").arg(ruta);
+    }
+    archivo.close(); // El parserFrecuencias interno se encargará de reabrirlo de forma controlada
+
+    // Limpieza preventiva transaccional antes de poblar
+    m_listaFrecuencias.clear();
+
+    // Delegamos de forma segura en la maquinaria del parser privado de la casa
+    m_listaFrecuencias = parserFrecuencias(ruta);
+
+    return ""; // Éxito transaccional sin incidentes
+}
 
 QString DatosIO::loadVisMol(
     const QString& ruta,
@@ -33,6 +62,7 @@ QString DatosIO::loadMOPAC(
     QVector<Enlace>& m_listaEnlaces,
     QString& comentario,
     QString& argumentos,
+    QVector<Frecuencias>& m_listaFrecuencias,
     TipoFormato formato,
     QString& texto
     ) {
@@ -44,39 +74,63 @@ QString DatosIO::loadMOPAC(
 
     QTextStream entrada(&archivo);
 
-    // Inicialización y limpieza transaccional de los contenedores
+    // Inicialización y limpieza transaccional de todos los contenedores
     m_listaAtomos.clear();
     m_listaEnlaces.clear();
+    m_listaFrecuencias.clear(); // ─── ¡LIMPIEZA AQUÍ!
     comentario = "";
     argumentos = "";
 
-    // =========================================================================
-    // EXTRACCIÓN MODULAR DEL CONTENIDO COMPLETO DEL LOG
-    // El QTextStream mantiene su puntero libre porque leemos usando el QFile
-    // =========================================================================
     if (formato == TipoFormato::OUT || formato == TipoFormato::ARC) {
-        // Guardamos la posición actual del stream por si los parsers la necesitan
         qint64 posicionOriginal = archivo.pos();
-
-        // Volcamos todo el texto plano para la consola de la UI
         archivo.seek(0);
         texto = entrada.readAll();
-
-        // Restauramos el puntero para que los parsers lean desde el principio
         archivo.seek(posicionOriginal);
     }
 
-    QString resultado = "";
+    // ─── [NUEVO] EXTRACCIÓN AUTOMÁTICA DEL ESPECTRO INFRACOJO (IR) ───
+    if (formato == TipoFormato::OUT) {
+        m_listaFrecuencias = parserFrecuencias(ruta); // Invoca internamente a tu parser
+    }
 
-    if(formato == TipoFormato::DAT){
-        resultado = parseDAT(entrada, m_listaAtomos, comentario, argumentos);
+    QString resultado = "";
+    if(formato == TipoFormato::DAT) resultado = parseDAT(entrada, m_listaAtomos, comentario, argumentos);
+    if(formato == TipoFormato::OUT) resultado = parseOUT(entrada, m_listaAtomos);
+    if(formato == TipoFormato::ARC) resultado = parseARC(entrada, m_listaAtomos);
+
+    archivo.close();
+    return resultado;
+}
+
+QString DatosIO::loadMopacAux(
+    const QString& ruta,
+    QVector<Trayectoria>& m_trayectoria,
+    QString& comentario,
+    QString& argumentos,
+    QString& texto // <-- NUEVO PARÁMETRO
+    ) {
+    QFile archivo(ruta);
+    if (!archivo.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString("Error: No se pudo abrir el archivo MOPAC AUX %1").arg(ruta);
     }
-    if(formato == TipoFormato::OUT){
-        resultado = parseOUT(entrada, m_listaAtomos);
+
+    QTextStream entrada(&archivo);
+
+    // Limpieza transaccional controlada antes de procesar
+    m_trayectoria.clear();
+    comentario = "";
+    argumentos = "";
+    texto = ""; // Inicializamos el texto vacío
+
+    // ─── [NUEVO] LECTURA ESPEJO DEL ARCHIVO .OUT ASOCIADO ───
+    QFileInfo info(ruta);
+    QString rutaEspejoOut = info.absolutePath() + "/" + info.baseName() + ".out";
+    if (QFile::exists(rutaEspejoOut)) {
+        texto = leerLogTexto(rutaEspejoOut); // Reutiliza tu lector nativo de texto
     }
-    if(formato == TipoFormato::ARC){
-        resultado = parseARC(entrada, m_listaAtomos);
-    }
+
+    // Delegación directa en el parser interno de la casa
+    QString resultado = parseMopacAux(entrada, m_trayectoria, comentario, argumentos);
 
     archivo.close();
     return resultado;
@@ -331,64 +385,49 @@ QString DatosIO::parseOUT(
     ) {
 
     QString todoElTexto = entrada.readAll();
+    m_listaAtomos.clear();
 
-    // 1. Validar que el cálculo terminó con éxito buscando el marcador de MOPAC
-    int indexFinTrabajo = todoElTexto.indexOf("* JOB ENDED NORMALLY *");
-    if (indexFinTrabajo == -1) {
-        return "El archivo .out no indica una finalización normal de MOPAC ('* JOB ENDED NORMALLY *').";
-    }
-
-    // 2. Extraer todo el texto desde el inicio hasta el marcador de fin
-    QString textoHastaFin = todoElTexto.left(indexFinTrabajo);
-
-    // 3. Buscar la PRIMERA aparición de "CARTESIAN COORDINATES" yendo hacia atrás
-    int indexGeometriaFinal = textoHastaFin.lastIndexOf("CARTESIAN COORDINATES");
+    // 1. ANCLAJE GEOMÉTRICO: Buscamos el bloque definitivo de coordenadas cartesianas
+    int indexGeometriaFinal = todoElTexto.lastIndexOf("CARTESIAN COORDINATES");
     if (indexGeometriaFinal == -1) {
-        return "No se encontró el bloque 'CARTESIAN COORDINATES' previo a la finalización del trabajo.";
+        return "Error: No se encontró el bloque 'CARTESIAN COORDINATES' en el archivo de salida MOPAC.";
     }
 
-    // 4. Aislar la sección que contiene la geometría final optimizada
-    QString seccionFinal = textoHastaFin.mid(indexGeometriaFinal);
+    QString seccionFinal = todoElTexto.mid(indexGeometriaFinal);
     QTextStream lector(&seccionFinal);
 
-    lector.readLine(); // Consumir cabecera "CARTESIAN COORDINATES"
+    // Saltamos las líneas de cabecera del bloque ("CARTESIAN COORDINATES", vacía, títulos)
+    lector.readLine();
+    lector.readLine();
 
-    bool encontradoBloqueDatos = false;
-    // Expresión regular flexible para absorber la separación por columnas de MOPAC
-    // Captura: 1: ID Atómico (opcional), 2: Símbolo químico, 3: X, 4: Y, 5: Z
-    QRegularExpression regex(R"(^\s*(\d+)?\s+([A-Za-z]{1,2})\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*))");
+    // Expresión regular de precisión para absorber las columnas de texto de MOPAC v23
+    QRegularExpression regexAtomo(R"(^\s*(\d+)\s+([A-Za-z]{1,2})\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)\s+(-?\d+\.\d+))");
     int contadorIdFallback = 1;
+    bool encontradoBloqueDatos = false;
 
     while (!lector.atEnd()) {
         QString linea = lector.readLine();
         QString lineaTrimmed = linea.trimmed();
 
-        // Si ya encontramos datos y viene una línea vacía, el bloque geométrico cerró
         if (encontradoBloqueDatos && lineaTrimmed.isEmpty()) {
-            break;
+            break; // MOPAC cierra el bloque de coordenadas con una línea en blanco
         }
 
-        // Saltamos cabeceras de texto o líneas vacías iniciales antes de los datos
         if (lineaTrimmed.isEmpty() || lineaTrimmed.startsWith("NO.") || lineaTrimmed.startsWith("ATOM")) {
             continue;
         }
 
-        QRegularExpressionMatch match = regex.match(linea);
+        QRegularExpressionMatch match = regexAtomo.match(linea);
         if (match.hasMatch()) {
             encontradoBloqueDatos = true;
             Atomo atomo;
 
-            // Si el archivo no provee un ID limpio por fila, usamos el autoincremental
+            // Extraemos el ID real del átomo asignado por el motor cuántico
             QString idCapturado = match.captured(1);
-            if (idCapturado.isEmpty()) {
-                atomo.id = contadorIdFallback++;
-            } else {
-                atomo.id = idCapturado.toInt();
-            }
-
+            atomo.id = idCapturado.isEmpty() ? contadorIdFallback++ : idCapturado.toInt();
             atomo.simbolo = match.captured(2);
 
-            // Restaura los Ångstroms optimizados de la salida cuántica a píxeles exactos del lienzo
+            // ─── CRUCIAL: MULTIPLICACIÓN POR EL FACTOR DE ESCALA GRÁFICA ───
             float x = match.captured(3).toFloat() * FACTOR_ANGSTROM;
             float y = match.captured(4).toFloat() * FACTOR_ANGSTROM;
             float z = match.captured(5).toFloat() * FACTOR_ANGSTROM;
@@ -399,26 +438,22 @@ QString DatosIO::parseOUT(
     }
 
     if (m_listaAtomos.isEmpty()) {
-        return "Error: Se localizó el bloque geométrico final optimizado pero no se pudieron parsear sus átomos.";
+        return "Error: No se pudieron extraer los átomos del bloque cartesiano.";
     }
 
-    // =========================================================================
-    // ─── ANCLAJE GEOMÉTRICO: RE-CENTRADO ABSOLUTO DEL MODELO EN EL VISOR ───
-    // Como MOPAC altera el centro de masas, calculamos el desvío y devolvemos
-    // la molécula al origen geométrico del lienzo (0,0,0) de píxeles puros.
-    // =========================================================================
+    // ─── CENTRALIZACIÓN GEOMÉTRICA CONTRA EL ORIGEN (0,0) ───
     QVector3D acumulador(0.0f, 0.0f, 0.0f);
     for (const Atomo& a : m_listaAtomos) {
         acumulador += a.posicion;
     }
     QVector3D centroDeMasasMopac = acumulador / m_listaAtomos.size();
 
-    // Restamos el centro de masas a cada átomo para re-centrar el sistema de coordenadas
+    // Restamos el centro de masas para clavar la estructura en el centro exacto del lienzo
     for (Atomo& a : m_listaAtomos) {
         a.posicion -= centroDeMasasMopac;
     }
 
-    return ""; // Éxito absoluto y corregido
+    return ""; // Éxito total
 }
 
 // PARSER .ARC: Archivo compacto de resumen definitivo de simulación
@@ -481,13 +516,231 @@ QString DatosIO::parseARC(
     return ""; // Éxito
 }
 
-QString DatosIO::leerLogTexto(const QString& ruta) {
+// PARSER .AUX: Archivo extenso con las coordenadas de la trayectoria
+QString DatosIO::parseMopacAux(QTextStream& entrada, QVector<Trayectoria>& m_trayectoria, QString& comentario, QString& argumentos) {
+    if (entrada.atEnd()) return "Archivo .aux vacío.";
+
+    QStringList plantillaSimbolos;
+    bool procesandoAtomos = false;
+    bool procesandoCoordenadas = false;
+    QVector<float> coordsEtapa;
+
+    while (!entrada.atEnd()) {
+        QString linea = entrada.readLine().trimmed();
+        if (linea.isEmpty()) continue;
+
+        if (linea.startsWith("TITLE=")) {
+            comentario = linea.section('=', 1).trimmed().remove('"');
+            procesandoAtomos = false;
+            procesandoCoordenadas = false;
+            continue;
+        }
+        else if (linea.startsWith("KEYWORDS=")) {
+            argumentos = linea.section('=', 1).trimmed().remove('"');
+            procesandoAtomos = false;
+            procesandoCoordenadas = false;
+            continue;
+        }
+        else if (linea.startsWith("ATOM_EL[")) {
+            procesandoAtomos = true;
+            procesandoCoordenadas = false;
+            continue;
+        }
+        else if (linea.startsWith("ATOM_X_UPDATED:ANGSTROMS[")) {
+            // FACTORIZADO: Procesamos el fotograma acumulado mediante la función utilitaria limpia
+            procesarYCentrarFotograma(plantillaSimbolos, coordsEtapa, m_trayectoria);
+            coordsEtapa.clear();
+            procesandoCoordenadas = true;
+            procesandoAtomos = false;
+            continue;
+        }
+        else if (linea.contains('=')) {
+            procesandoAtomos = false;
+            procesandoCoordenadas = false;
+        }
+
+        if (procesandoAtomos) {
+            plantillaSimbolos.append(linea.simplified().split(' ', Qt::SkipEmptyParts));
+        }
+        else if (procesandoCoordenadas) {
+            QStringList tokens = linea.simplified().split(' ', Qt::SkipEmptyParts);
+            for (const QString& token : tokens) {
+                coordsEtapa.append(token.toFloat());
+            }
+        }
+    }
+
+    // FACTORIZADO: Procesamiento del último fotograma residual con la misma función común
+    procesarYCentrarFotograma(plantillaSimbolos, coordsEtapa, m_trayectoria);
+
+    if (plantillaSimbolos.isEmpty()) return "Error: Falta sección 'ATOM_EL:'.";
+    if (m_trayectoria.isEmpty()) return "Error: Falta sección 'ATOM_X_UPDATED:'.";
+
+    return "";
+}
+
+void DatosIO::procesarYCentrarFotograma(const QStringList& plantillaSimbolos, const QVector<float>& coordsEtapa, QVector<Trayectoria>& m_trayectoria) {
+    if (coordsEtapa.isEmpty() || plantillaSimbolos.isEmpty()) return;
+
+    Trayectoria fotograma;
+    int ptr = 0;
+    QVector3D acumulador(0.0f, 0.0f, 0.0f);
+
+    // DETERMINACIÓN DE LA ESCALA: Si los valores ya vienen pre-escalados, el factor es 1.0f
+    float factorEscalaReal = (coordsEtapa.size() > 0 && qAbs(coordsEtapa[0]) < 15.0f) ? 100.0f : 1.0f;
+
+    for (int i = 0; i < plantillaSimbolos.size(); ++i) {
+        if (ptr + 2 >= coordsEtapa.size()) break;
+        Atomo atomo;
+        atomo.id = i + 1;
+        atomo.simbolo = plantillaSimbolos[i];
+
+        // Proyección acotada a píxeles estables
+        atomo.posicion = QVector3D(
+            coordsEtapa[ptr]   * factorEscalaReal,
+            coordsEtapa[ptr+1] * factorEscalaReal,
+            coordsEtapa[ptr+2] * factorEscalaReal
+            );
+        ptr += 3;
+        acumulador += atomo.posicion;
+        fotograma.listaAtomos.append(atomo);
+    }
+
+    if (!fotograma.listaAtomos.isEmpty()) {
+        QVector3D centroDeMasas = acumulador / fotograma.listaAtomos.size();
+        for (Atomo& a : fotograma.listaAtomos) {
+            a.posicion -= centroDeMasas; // Clavado en el centro del lienzo (0,0)
+        }
+        m_trayectoria.append(fotograma);
+    }
+}
+
+QVector<Frecuencias> DatosIO::parserFrecuencias(const QString& ruta) {
+    QVector<Frecuencias> resultadoEspectro;
+
     QFile archivo(ruta);
     if (!archivo.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return ""; // Fallback defensivo: si MOPAC aún no ha escrito nada, devuelve vacío
+        return resultadoEspectro;
     }
+
     QTextStream entrada(&archivo);
-    QString contenido = entrada.readAll();
+    QString todoElTexto = entrada.readAll();
     archivo.close();
-    return contenido;
+
+    // 1. ANCLAJE: Localizamos el inicio real de la tabla analítica en el .out
+    int indexAnalisis = todoElTexto.indexOf("NORMAL COORDINATE ANALYSIS");
+    if (indexAnalisis == -1) {
+        return resultadoEspectro;
+    }
+
+    QString seccionFreq = todoElTexto.mid(indexAnalisis);
+    QTextStream lector(&seccionFreq);
+    lector.readLine(); // Consumimos el título
+
+    // Expresión regular para aislar números decimales individuales
+    QRegularExpression regexDigitos(R"((-?\d+\.\d+))");
+
+    // Expresión regular para cazar las líneas de coordenadas de los átomos (ID + 3 Columnas)
+    QRegularExpression regexFilaDesplazamiento(R"(^\s*(\d+)\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)\s+(-?\d+\.\d+))");
+
+    QString filaValores = "";
+    QStringList lineasEstructura;
+
+    // 2. ESCANEO DEL BLOQUE COMPLETO DE MODOS NORMALES
+    while (!lector.atEnd()) {
+        QString linea = lector.readLine();
+        QString lineaTrimmed = linea.trimmed();
+
+        // Paramos si empieza el siguiente bloque de MOPAC
+        if (linea.contains("MASS-WEIGHTED COORDINATE ANALYSIS") || linea.contains("FORCE CONSTANT IN CARTESIAN")) {
+            break;
+        }
+
+        if (lineaTrimmed.isEmpty()) continue;
+
+        // Capturamos de forma dinámica la fila de valores de cm⁻¹ si no la teníamos ya
+        if (filaValores.isEmpty() && !lineaTrimmed.startsWith("Root") &&
+            !lineaTrimmed.contains("A'") && !lineaTrimmed.contains("A\"") &&
+            !lineaTrimmed.contains("Ag") && !lineaTrimmed.contains("B1u") && !lineaTrimmed.contains("B2u") &&
+            regexDigitos.match(lineaTrimmed).hasMatch()) {
+
+            filaValores = lineaTrimmed;
+            continue;
+        }
+
+        // Acumulamos las filas de datos numéricos de los átomos
+        QRegularExpressionMatch matchAtomo = regexFilaDesplazamiento.match(linea);
+        if (matchAtomo.hasMatch()) {
+            lineasEstructura.append(linea);
+        }
+    }
+
+    // 3. PROCESADO E INYECCIÓN DE METADATOS DE FRECUENCIAS (cm⁻¹)
+    QRegularExpressionMatchIterator itFreq = regexDigitos.globalMatch(filaValores);
+    QVector<int> indicesColumnasValidas; // Guarda la posición de las columnas que son > 10 cm⁻¹
+    int columnaCandidata = 0;
+
+    while (itFreq.hasNext()) {
+        QRegularExpressionMatch match = itFreq.next();
+        float valorCm1 = match.captured(1).toFloat();
+
+        if (valorCm1 > 10.0f) {
+            Frecuencias ficha;
+            ficha.frecuencia = valorCm1;
+            resultadoEspectro.append(ficha);
+            indicesColumnasValidas.append(columnaCandidata);
+        }
+        columnaCandidata++;
+    }
+
+    if (resultadoEspectro.isEmpty() || lineasEstructura.isEmpty()) {
+        return resultadoEspectro;
+    }
+
+    // 4. EXTRACCIÓN MODULAR EN MATRIZ DE LAS VIBRACIONES (dx, dy, dz)
+    // Inicializamos la rejilla de vibraciones para cada frecuencia válida detectada
+    for (int i = 0; i < resultadoEspectro.size(); ++i) {
+        // Necesitamos tantas fichas de vibración como átomos se hayan leído (tamaño de líneas / 3 ejes)
+        int totalAtomos = lineasEstructura.size() / 3;
+        for (int a = 0; a < totalAtomos; ++a) {
+            Vibraciones v;
+            v.id_atomo = a + 1; // Asignamos el ID correlativo base 1
+            v.dx = 0.0f; v.dy = 0.0f; v.dz = 0.0f;
+            resultadoEspectro[i].vibraciones.append(v);
+        }
+    }
+
+    // Procesamos el sándwich de 3 ejes (X, Y, Z) por cada átomo
+    for (int i = 0; i < lineasEstructura.size(); ++i) {
+        QRegularExpressionMatch match = regexFilaDesplazamiento.match(lineasEstructura[i]);
+        if (match.hasMatch()) {
+            int idFilaMatriz = match.captured(1).toInt();
+            int idAtomoMapeado = ((idFilaMatriz - 1) / 3); // Agrupa las líneas de 3 en 3 por átomo
+            int ejeActivo = (idFilaMatriz - 1) % 3;        // 0 = X, 1 = Y, 2 = Z
+
+            // Extraemos los tres valores numéricos que MOPAC imprimió en esta fila
+            float col1 = match.captured(2).toFloat();
+            float col2 = match.captured(3).toFloat();
+            float col3 = match.captured(4).toFloat();
+            float columnasCrudas[3] = { col1, col2, col3 };
+
+            // Inyectamos el desplazamiento en la frecuencia correspondiente mapeando su columna
+            for (int f = 0; f < resultadoEspectro.size(); ++f) {
+                int columnaMopacTarget = indicesColumnasValidas[f];
+
+                // Red de seguridad por si MOPAC vuelca menos columnas de las esperadas
+                if (columnaMopacTarget >= 3) continue;
+
+                float valorDesplazamiento = columnasCrudas[columnaMopacTarget];
+
+                // Asignamos el diferencial al eje tridimensional correspondiente
+                if (ejeActivo == 0) resultadoEspectro[f].vibraciones[idAtomoMapeado].dx = valorDesplazamiento;
+                if (ejeActivo == 1) resultadoEspectro[f].vibraciones[idAtomoMapeado].dy = valorDesplazamiento;
+                if (ejeActivo == 2) resultadoEspectro[f].vibraciones[idAtomoMapeado].dz = valorDesplazamiento;
+            }
+        }
+    }
+
+    return resultadoEspectro;
 }
+

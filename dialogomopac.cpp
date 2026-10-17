@@ -1,23 +1,22 @@
 #include "dialogomopac.h"
-
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
 #include <QGroupBox>
 
 DialogoMopac::DialogoMopac(QString& argumentos, QString& comentario, QWidget *parent)
-    : QDialog(parent), m_argumentos(&argumentos), m_comentario(&comentario){
+    : QDialog(parent), m_argumentosOut(argumentos), m_comentarioOut(comentario) {
 
-    // Eliminamos cualquier referencia a ui->setupUi(this) ya que diseñamos a mano
     initUi();
 
-    if(!m_comentario->isEmpty()){
-        m_txtComentario->setText(*m_comentario);
+    // Si el proyecto ya cuenta con un título asignado en la sesión, lo cargamos en el editor
+    if (!m_comentarioOut.isEmpty()) {
+        m_txtComentario->setText(m_comentarioOut);
     }
 }
 
 DialogoMopac::~DialogoMopac() {
-    // Ya no hay puntero ui que borrar aquí, Qt gestiona la memoria de los widgets hijos automáticamente
+    // Qt destruye de forma automática todos los widgets que tengan asignado 'this' como padre
 }
 
 void DialogoMopac::initUi() {
@@ -37,9 +36,9 @@ void DialogoMopac::initUi() {
 
     m_comboTarea = new QComboBox(this);
     m_comboTarea->addItems({
-        tr("Optimización Geométrica (Solo Final)"),  // Índice 0
-        tr("Optimización Geométrica Detallada (LARGE)"), // Índice 1
-        tr("Modos Vibracionales (FORCE)")            // Índice 2
+        tr("Optimización Geométrica (Solo Final)"),      // Índice 0
+        tr("Optimización Geométrica Detallada (AUX)"),   // Índice 1 -> Crucial para simulación en vivo
+        tr("Modos Vibracionales (FORCE)")                // Índice 2
     });
 
     m_checkPrecision = new QCheckBox(tr("Convergencia Estricta (PRECISE)"), this);
@@ -60,7 +59,7 @@ void DialogoMopac::initUi() {
     layoutDatos->addWidget(m_txtComentario);
 
     // =========================================================================
-    // 3. BLOQUE INFERIOR: BOTONERA DE ACCIÓN SEMÁNTICA (TUS INTENCIONES)
+    // 3. BLOQUE INFERIOR: BOTONERA DE ACCIÓN
     // =========================================================================
     QHBoxLayout* layoutBotones = new QHBoxLayout();
     m_btnExportar = new QPushButton(tr("📦 Exportar Entrada"), this);
@@ -72,12 +71,12 @@ void DialogoMopac::initUi() {
     layoutBotones->addWidget(m_btnLanzar);
     layoutBotones->addWidget(m_btnCancelar);
 
-    // Ensamblamos los paneles verticales en el lienzo del QDialog
+    // Ensamblado estructural vertical de los paneles
     layoutPrincipal->addWidget(grupoKeywords);
     layoutPrincipal->addWidget(grupoDatos);
     layoutPrincipal->addLayout(layoutBotones);
 
-    // Disparamos las conexiones directas de los botones de código
+    // Conexiones de la botonera interna del diálogo
     connect(m_btnExportar, &QPushButton::clicked, this, &DialogoMopac::alExportarEntrada);
     connect(m_btnLanzar,   &QPushButton::clicked, this, &DialogoMopac::alLanzarSimulacion);
     connect(m_btnCancelar, &QPushButton::clicked, this, &DialogoMopac::reject);
@@ -85,23 +84,26 @@ void DialogoMopac::initUi() {
     setEstilos();
 }
 
+/**
+ * @brief Ensambla las directrices cuánticas en la cadena de Keywords final de MOPAC.
+ * @note [CORREGIDO]: Sintaxis estricta de 'AUX' purgada de argumentos para garantizar el volcado del .aux
+ */
 QString DialogoMopac::construirKeywords() {
-    QString cmdKeywords = m_comboMetodo->currentText(); // "AM1", "PM3", etc.
+    QString cmdKeywords = m_comboMetodo->currentText();
 
-    // Evaluamos la intención del usuario según el nuevo orden del combo
     switch (m_comboTarea->currentIndex()) {
     case 0:
-        // Optimización estándar: no añadimos nada, MOPAC optimiza por defecto
+        // Optimización por defecto del motor
         break;
 
     case 1:
-        // Optimización detallada: inyectamos LARGE para escupir todas las geometrías intermedias
-        cmdKeywords += " LARGE AUX(COMP,XP,XS,XW)";
+        // [CORREGIDO]: 'AUX' y 'LARGE' limpios para asegurar la generación de fotogramas de la trayectoria
+        cmdKeywords += " AUX LARGE";
         break;
 
     case 2:
-        // Tarea espectroscópica de frecuencias
-        cmdKeywords += " FORCE";
+        // Tarea de cálculo de frecuencias vibracionales e IR
+        cmdKeywords += " AUX FORCE LET GEO-OK";
         break;
     }
 
@@ -113,41 +115,41 @@ QString DialogoMopac::construirKeywords() {
 }
 
 void DialogoMopac::setEstilos(){
-    // 1. Asignamos un identificador único al QLineEdit para aplicar el CSS
     m_txtComentario->setObjectName("txtComentarioResaltado");
 
-    // 2. Definimos la plantilla CSS con fondo gris claro y texto azul
     QString estiloComentario =
         "QLineEdit#txtComentarioResaltado {"
-        "   background-color: #f2f2f2;"  /* Fondo gris claro */
-        "   color: #0033cc;"             /* Texto azul */
-        "   border: 1px solid #a0a0a0;"  /* Borde gris para definir el contorno */
-        "   border-radius: 4px;"         /* Bordes ligeramente redondeados */
-        "   padding: 6px;"               /* Espacio interno para que no quede pegado */
-        "   font-weight: bold;"          /* Texto en negrita para resaltar */
+        "   background-color: #f2f2f2;"
+        "   color: #0033cc;"
+        "   border: 1px solid #a0a0a0;"
+        "   border-radius: 4px;"
+        "   padding: 6px;"
+        "   font-weight: bold;"
         "}"
         "QLineEdit#txtComentarioResaltado:focus {"
-        "   background-color: #e6e6e6;"  /* Fondo gris un poco más oscuro al hacer clic */
-        "   border: 1px solid #0033cc;"  /* El borde se vuelve azul al escribir */
+        "   background-color: #e6e6e6;"
+        "   border: 1px solid #0033cc;"
         "}";
 
-    // 3. Aplicamos el estilo únicamente al componente de comentario
     m_txtComentario->setStyleSheet(estiloComentario);
 }
 
 void DialogoMopac::alExportarEntrada() {
-    // LO QUE VENDRÁ: Aquí dentro le notificaremos a m_vista que el usuario quiere exportar,
-    // pasándole las Keywords calculadas por 'construirKeywords()' y el texto del comentario.
-    *m_argumentos = construirKeywords();
-    *m_comentario = m_txtComentario->text().trimmed();
+    // Volcado atómico seguro de las propiedades seleccionadas hacia las referencias de salida
+    m_argumentosOut = construirKeywords();
 
-    this->done(1); // 1 significa que el usuario quiere EXPORTAR
+    QString textoComentario = m_txtComentario->text().trimmed();
+    m_comentarioOut = textoComentario.isEmpty() ? tr("Molecula generada con VisorMol_V20") : textoComentario;
+
+    this->done(1); // Transacción confirmada para exportación de archivo .dat
 }
 
 void DialogoMopac::alLanzarSimulacion() {
-    // LO QUE VENDRÁ: Aquí notificaremos a m_vista que el usuario quiere calcular en vivo.
-    *m_argumentos = construirKeywords();
-    *m_comentario = m_txtComentario->text().trimmed();
+    m_argumentosOut = construirKeywords();
 
-    this->done(2); // 2 significa que el usuario quiere SIMULAR
+    QString textoComentario = m_txtComentario->text().trimmed();
+    m_comentarioOut = textoComentario.isEmpty() ? tr("Molecula generada con VisorMol_V20") : textoComentario;
+
+    this->done(2); // Transacción confirmada para arranque de simulación cuántica asíncrona
+
 }

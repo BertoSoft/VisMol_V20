@@ -466,6 +466,8 @@ void MoleculaVista::initAnimacionBar(){
     QWidget* espaciadorDerecho = new QWidget();
     espaciadorDerecho->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     m_barraAnimacion->addWidget(espaciadorDerecho);
+
+    m_timerAnimacion = new QTimer(this);
 }
 
 void MoleculaVista::initDockPanels(){
@@ -537,8 +539,35 @@ void MoleculaVista::initConnect(){
     connect(m_accionesElementos.modoEnlace, &QAction::triggered, this, &MoleculaVista::alActivarModoEnlace);
     connect(m_accionesElementos.modoRotar, &QAction::triggered, this, &MoleculaVista::alActivarModoRotar);
 
-    connect(m_accionesAnimacion.reproducirPausar, &QAction::toggled, this, &MoleculaVista::alAlternarReproduccionAnimacion);
-    connect(m_deslizadorFotogramas, &QSlider::valueChanged, this, &MoleculaVista::alCambiarDeslizadorFotograma);
+
+    // ─── MAQUINARIA DE ANIMACIÓN: CONEXIONES CENTRALIZADAS CON TUS SLOTS REALES ───
+    connect(m_accionesAnimacion.reproducirPausar, &QAction::toggled, this, &MoleculaVista::alPlayAnimacion);
+    connect(m_deslizadorFotogramas, &QSlider::valueChanged, this, &MoleculaVista::alCambiarDeslizador);
+    connect(m_timerAnimacion, &QTimer::timeout, this, &MoleculaVista::adelantePlay);
+
+    // Requisito 3 y 4: Paso manual Atrás (Interrumpe Play + Bucle Extremo)
+    connect(m_accionesAnimacion.fotogramaAnterior, &QAction::triggered, this, [this]() {
+        if (m_timerAnimacion->isActive()) {
+            m_accionesAnimacion.reproducirPausar->setChecked(false);
+        }
+        if (m_view) {
+            int total = m_view->getTamTrayectoria();
+            if (total <= 1) return;
+            m_deslizadorFotogramas->setValue(m_fotogramaActual > 0 ? m_fotogramaActual : total);
+        }
+    });
+
+    // Requisito 3 y 4: Paso manual Adelante (Interrumpe Play + Bucle Extremo)
+    connect(m_accionesAnimacion.fotogramaSiguiente, &QAction::triggered, this, [this]() {
+        if (m_timerAnimacion->isActive()) {
+            m_accionesAnimacion.reproducirPausar->setChecked(false);
+        }
+        if (m_view) {
+            int total = m_view->getTamTrayectoria();
+            if (total <= 1) return;
+            m_deslizadorFotogramas->setValue(m_fotogramaActual < (total - 1) ? m_fotogramaActual + 2 : 1);
+        }
+    });
 
     connect(m_listaFrecuencias, &QListWidget::currentRowChanged, this, &MoleculaVista::alSeleccionarFrecuencia);
 
@@ -810,7 +839,10 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
 
     // El motor de cálculo exige que haya átomos en pantalla pero bloquea nuevas simulaciónes
     // si el archivo abierto ya corresponde a un resultado final cuántico compilado (.out)
-    m_accionesCalculo.configurarMopac->setEnabled(!modoLienzo.estaVacio && modoLienzo.formato != TipoFormato::OUT && modoLienzo.formato != TipoFormato::ARC);
+    m_accionesCalculo.configurarMopac->setEnabled(!modoLienzo.estaVacio
+                                                  && modoLienzo.formato != TipoFormato::OUT
+                                                  && modoLienzo.formato != TipoFormato::ARC
+                                                  && modoLienzo.formato != TipoFormato::AUX);
     m_accionesCalculo.detenerMopac->setEnabled(modoLienzo.estaMopacActivo);
 
     // =========================================================================
@@ -823,11 +855,33 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
     m_accionesEdicion.rehacer->setEnabled(hayView && m_view->hayFuturo());
 
     // =========================================================================
-    // CAPA 4: ENTORNOS COMPLEMENTARIOS (REPRODUCTOR DE TRAYECTORIAS)
+    // CAPA 4: ENTORNO DE ANIMACIÓN (ARRANQUE DIRECTO EN EL ÚLTIMO PASO)
     // =========================================================================
+    int tamTrayectoriaReal = m_view ? m_view->getTamTrayectoria() : 0;
 
-    // Si la simulación cuántica se vacía o cierra, retiramos la barra de animación de pantalla
-    if (modoLienzo.estaVacio && m_barraAnimacion) {
+    if (tamTrayectoriaReal > 0 && m_barraAnimacion) {
+        // Forzamos la parada de seguridad de la reproducción
+        if (m_timerAnimacion->isActive()) {
+            m_accionesAnimacion.reproducirPausar->blockSignals(true);
+            m_accionesAnimacion.reproducirPausar->setChecked(false);
+            m_accionesAnimacion.reproducirPausar->blockSignals(false);
+            m_timerAnimacion->stop();
+        }
+
+        m_deslizadorFotogramas->blockSignals(true);
+        m_deslizadorFotogramas->setMinimum(1);
+        m_deslizadorFotogramas->setMaximum(tamTrayectoriaReal);
+
+        // ─── REQUISITO 1: LA ANIMACIÓN EMPIEZA EN EL ÚLTIMO FOTOGRAMA FIJA ───
+        m_deslizadorFotogramas->setValue(tamTrayectoriaReal);
+        m_fotogramaActual = tamTrayectoriaReal - 1;
+
+        m_deslizadorFotogramas->blockSignals(false);
+
+        m_lblFotogramaInfo->setText(tr("Paso: %1 / %2").arg(tamTrayectoriaReal).arg(tamTrayectoriaReal));
+        m_barraAnimacion->setVisible(true);
+    }
+    else if (m_barraAnimacion) {
         m_barraAnimacion->setVisible(false);
     }
 
@@ -851,39 +905,72 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
     // =========================================================================
 
     // Evaluamos los criterios de compatibilidad química específicos para cada tipo de panel
-    bool admiteConsola     = (!modoLienzo.estaVacio && (modoLienzo.formato == TipoFormato::OUT || modoLienzo.formato == TipoFormato::ARC));
-    bool admiteFrecuencias = (!modoLienzo.estaVacio && modoLienzo.formato == TipoFormato::OUT);
+    bool admiteConsola     = (!modoLienzo.estaVacio && (modoLienzo.formato == TipoFormato::OUT || modoLienzo.formato == TipoFormato::ARC || modoLienzo.formato == TipoFormato::AUX || modoLienzo.formato == TipoFormato::FORCE_OUT));
+    bool admiteFrecuencias = (!modoLienzo.estaVacio && modoLienzo.formato == TipoFormato::FORCE_OUT);
 
-    // --- SUBSECCIÓN A: GESTIÓN DE LA CONSOLA DE TEXTO (SOPORTA .OUT Y .ARC) ---
+    // --- SUBSECCIÓN A: GESTIÓN SEMÁNTICA DE LA CONSOLA DE TEXTO (LOG) ---
     m_accionesAnalisis.mostrarConsola->setEnabled(admiteConsola);
 
     if (!admiteConsola) {
-        // Escenario A1: Lienzo vacío o formatos simples (.xyz / .vismol) -> Ocultar panel
-        if (m_panelConsola) m_panelConsola->hide();
-
-        // Desactivamos el check del menú de manera silenciosa para evitar bucles de eventos
+        // Bloqueamos las señales temporalmente para apagar el botón sin disparar bucles infinitos de eventos
         m_accionesAnalisis.mostrarConsola->blockSignals(true);
         m_accionesAnalisis.mostrarConsola->setChecked(false);
         m_accionesAnalisis.mostrarConsola->blockSignals(false);
+
+        if (m_panelConsola) m_panelConsola->setVisible(false);
     } else {
-        // Escenario A2: Carga de un archivo .out o .arc -> Forzar apertura en pantalla
+        // ─── [SINCRO]: Encendemos el interruptor del botón y Qt abrirá el dock a través de tu initConnect
+        m_accionesAnalisis.mostrarConsola->blockSignals(true);
         m_accionesAnalisis.mostrarConsola->setChecked(true);
+        m_accionesAnalisis.mostrarConsola->blockSignals(false);
+
+        if (m_panelConsola) {
+            m_panelConsola->setVisible(true);
+            m_panelConsola->raise(); // Trae al frente sobre el lienzo
+        }
     }
 
-    // --- SUBSECCIÓN B: GESTIÓN DEL PANEL DE FRECUENCIAS (SOPORTA ÚNICAMENTE .OUT) ---
+    // --- SUBSECCIÓN B: GESTIÓN SEMÁNTICA DEL PANEL DE FRECUENCIAS (IR) ---
     m_accionesAnalisis.mostrarFreq->setEnabled(admiteFrecuencias);
 
     if (!admiteFrecuencias) {
-        // Escenario B1: Lienzo vacío o formatos sin espectroscopía (.xyz / .vismol / .arc) -> Ocultar panel
-        if (m_panelFrecuencias) m_panelFrecuencias->hide();
-
-        // Desactivamos el check del menú de manera silenciosa para evitar bucles de eventos
         m_accionesAnalisis.mostrarFreq->blockSignals(true);
         m_accionesAnalisis.mostrarFreq->setChecked(false);
         m_accionesAnalisis.mostrarFreq->blockSignals(false);
+
+        if (m_panelFrecuencias) m_panelFrecuencias->setVisible(false);
+        if (m_listaFrecuencias) m_listaFrecuencias->clear();
     } else {
-        // Escenario B2: Carga de un archivo .out -> Forzar apertura en pantalla
-        m_accionesAnalisis.mostrarFreq->setChecked(true);
+        if (m_view && m_listaFrecuencias) {
+            m_listaFrecuencias->clear(); // Borrado preventivo del texto de prueba de fábrica
+
+            // Recuperamos el espectro de cm-1 reales mapeado por tu parser cuántico
+            QVector<Frecuencias> espectroReal = m_view->getListaFrecuencias();
+
+            if (!espectroReal.isEmpty()) {
+                // Poblamos el widget con los datos reales indexados
+                for (const auto& nodo : espectroReal) {
+                    QString itemTexto = QString("%1 cm⁻¹ - Modo Normal Vibracional (IR)").arg(nodo.frecuencia, 0, 'f', 1);
+                    m_listaFrecuencias->addItem(itemTexto);
+                }
+
+                // ─── [SINCRO PERFECTA]: Encendemos de forma oficial el interruptor lógico del Action ───
+                m_accionesAnalisis.mostrarFreq->blockSignals(true);
+                m_accionesAnalisis.mostrarFreq->setChecked(true);
+                m_accionesAnalisis.mostrarFreq->blockSignals(false);
+
+                // Forzamos al Dock a sincronizarse con el estado del Action levantándose en la pantalla
+                if (m_panelFrecuencias) {
+                    m_panelFrecuencias->setVisible(true);
+                    m_panelFrecuencias->raise(); // Empuja la ventana al frente visual
+                }
+            } else {
+                m_accionesAnalisis.mostrarFreq->blockSignals(true);
+                m_accionesAnalisis.mostrarFreq->setChecked(false);
+                m_accionesAnalisis.mostrarFreq->blockSignals(false);
+                if (m_panelFrecuencias) m_panelFrecuencias->setVisible(false);
+            }
+        }
     }
 }
 
@@ -948,15 +1035,84 @@ void MoleculaVista::alAlternarReproduccionAnimacion(bool activado){
 }
 
 void MoleculaVista::alCambiarDeslizadorFotograma(int fotograma){
+    if (!m_view) return;
+
+    // Actualizamos el texto informativo de la barra de reproducción
     m_lblFotogramaInfo->setText(tr("Paso: %1 / %2").arg(fotograma).arg(m_deslizadorFotogramas->maximum()));
+
+    // ─── ¡NUEVO!: ACTUALIZAR EL LIENZO CON EL PASO DE LA ANIMACIÓN ───
+    // Añade el método público 'setFotogramaTrayectoria' en el Cerebro para transferir las coordenadas
+    m_view->setFotogramaTrayectoria(fotograma - 1);
 }
 
 void MoleculaVista::alSeleccionarFrecuencia(int indice){
-    if (indice < 0) return;
+    if (indice < 0 || !m_view || !m_listaFrecuencias) return;
+
+    // 1. Extraemos el texto del renglón seleccionado
     QString textoModo = m_listaFrecuencias->item(indice)->text();
+
+    // 2. Imprimimos feedback contextual inmediato en tu barra de estado Sunken
+    m_lblEstadoTexto->setText(tr(" Analizando espectro: %1").arg(textoModo));
+
+    // 3. Informamos al cerebro el índice base cero activo para el cálculo de desplazamientos
+    m_view->setFrecuenciaActiva(indice);
 }
 
+void MoleculaVista::alPlayAnimacion(bool activado){
+    m_accionesAnimacion.reproducirPausar->setText(activado ? tr("Pausar") : tr("Reproducir"));
 
+    if (activado) {
+        int totalFrames = m_view ? m_view->getTamTrayectoria() : 0;
+        if (totalFrames <= 1) {
+            // Protección: Si no hay trayectoria válida o solo tiene 1 paso, abortamos el Play
+            m_accionesAnimacion.reproducirPausar->blockSignals(true);
+            m_accionesAnimacion.reproducirPausar->setChecked(false);
+            m_accionesAnimacion.reproducirPausar->blockSignals(false);
+            return;
+        }
+
+        // ─── REQUISITO 2: SE REPRODUCE EMPEZANDO POR FOTOGRAMA = 0 ───
+        m_fotogramaActual = 0;
+        m_deslizadorFotogramas->setValue(1); // El slider moverá visualmente el lienzo al inicio
+
+        m_timerAnimacion->start(100);        // Inicia el latido del motor (10 FPS)
+    } else {
+        m_timerAnimacion->stop();            // Congela el motor inmediatamente en el frame actual
+    }
+}
+
+void MoleculaVista::adelantePlay() {
+    if (!m_view) return;
+    int totalFotogramas = m_view->getTamTrayectoria();
+
+    // ─── REQUISITO 2: SE REPRODUCE INDEFINIDAMENTE (BUCLE AUTOMÁTICO CONTINUO) ───
+    if (m_fotogramaActual < (totalFotogramas - 1)) {
+        m_deslizadorFotogramas->setValue(m_fotogramaActual + 2); // Avanza un paso normal (base 1)
+    } else {
+        m_deslizadorFotogramas->setValue(1);                     // Llegó al final: vuelve al fotograma 0 (1 en slider)
+    }
+}
+
+void MoleculaVista::atrasPlay(){
+    if (!m_view) return;
+    int totalFotogramas = m_view->getTamTrayectoria();
+
+    // Retroceso automático circular (Por si inviertes la reproducción)
+    if (m_fotogramaActual > 0) {
+        m_deslizadorFotogramas->setValue(m_fotogramaActual);    // Retrocede un paso normal
+    } else {
+        m_deslizadorFotogramas->setValue(totalFotogramas);      // Llegó al principio: salta al final de la cola
+    }
+}
+
+void MoleculaVista::alCambiarDeslizador(int fotograma){
+    if (!m_view) return;
+
+    m_fotogramaActual = fotograma - 1; // Sincronización del índice base cero
+    m_lblFotogramaInfo->setText(tr("Paso: %1 / %2").arg(fotograma).arg(m_deslizadorFotogramas->maximum()));
+
+    m_view->setFotogramaTrayectoria(m_fotogramaActual); // Mutación y repintado geométrico
+}
 
 // =========================================================================
 // ZONA: EVENTOS PROTEGIDOS DEL SISTEMA OPERATIVO

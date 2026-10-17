@@ -77,6 +77,10 @@ private slots:
     void alAlternarReproduccionAnimacion(bool activado);
     void alCambiarDeslizadorFotograma(int fotograma);
     void alSeleccionarFrecuencia(int indice);
+    void alPlayAnimacion(bool activado);
+    void alCambiarDeslizador(int fotograma);
+    void adelantePlay();
+    void atrasPlay();
 
 protected:
     // =========================================================================
@@ -143,6 +147,9 @@ private:
 
     QSlider*       m_deslizadorFotogramas = nullptr;
     QLabel*        m_lblFotogramaInfo     = nullptr;
+    QTimer*        m_timerAnimacion       = nullptr;
+    int            m_fotogramaActual      = 0;
+
 
     QDockWidget*   m_panelFrecuencias   = nullptr;
     QDockWidget*   m_panelConsola       = nullptr;
