@@ -150,9 +150,25 @@ QString MoleculaView::abrirArchivo(const QString& ruta){
     else if (formatoDeteccion == TipoFormato::AUX) {
         respuesta = loadFileMopacAux(ruta);
     }
-    // ─── LÓGICA ELEGANTE: NUEVA REDIRECCIÓN ATÓMICA DE FRECUENCIAS ───
     else if (formatoDeteccion == TipoFormato::FORCE_OUT) {
-        respuesta = loadFileMopacForce(ruta); // <─── Llamamos a tu nuevo cargador especializado
+        respuesta = loadFileMopacForce(ruta);
+    }
+    // ─── ACCIÓN INMEDIATA ANTE EL NUEVO TOKEN DE FUERZAS AUXILIAR ───
+    else if (formatoDeteccion == TipoFormato::FORCE_AUX) {
+        // Como el archivo cargado originalmente es el .aux, requerimos mapear las
+        // frecuencias analíticas del .out cuántico que vive en el mismo directorio.
+        QFileInfo info(ruta);
+        QString rutaEspejoOut = info.absolutePath() + "/" + info.baseName() + ".out";
+
+        if (QFile::exists(rutaEspejoOut)) {
+            // Pasamos la ruta del .out a loadFileMopacForce porque esa función ya sabe
+            // cómo buscar de forma transaccional a su hermano .aux de fuerzas
+            respuesta = loadFileMopacForce(rutaEspejoOut);
+        } else {
+            // Fallback: Si MOPAC no generó el .out o se movió de carpeta, pasamos la ruta
+            // del propio .aux para leer al menos la geometría base de los átomos
+            respuesta = loadFileMopacForce(ruta);
+        }
     }
     else {
         return tr("El archivo seleccionado no contiene ninguna firma molecular o formato reconocido.");
@@ -550,6 +566,10 @@ int MoleculaView::getTamTrayectoria(){
 
 QVector<Frecuencias> MoleculaView::getListaFrecuencias(){
     return m_listaFrecuencias;
+}
+
+int MoleculaView::getFrecuenciaActiva(){
+    return m_frecuenciaActiva;
 }
 
 // =========================================================================
@@ -1101,18 +1121,17 @@ QString MoleculaView::loadFileMOPAC(const QString& ruta, TipoFormato formato){
 }
 
 QString MoleculaView::loadFileMopacForce(const QString& ruta) {
-    QVector<Trayectoria> trayectoriaTemporal;
-    QString comentarioTemporal;
-    QString argumentosTemporal;
-    QString textoTemporal;
+    QVector<Atomo> listaAtomosTemporal;
+    QString comentarioTemporal = "Cálculo FORCE"; // Metadato fallback
+    QString argumentosTemporal = "";
 
     QFileInfo info(ruta);
     QString rutaAuxHermano = info.absolutePath() + "/" + info.baseName() + ".aux";
 
-    // 1. Extraemos la trayectoria tridimensional real desde el archivo auxiliar .aux
+    // 1. Extraemos la geometría real FORCE utilizando el nuevo cargador público unificado
     if (QFile::exists(rutaAuxHermano)) {
-        QString errAux = DatosIO::loadMopacAux(rutaAuxHermano, trayectoriaTemporal, comentarioTemporal,
-                                               argumentosTemporal, textoTemporal);
+        // Invocación segura a la pasarela pública
+        QString errAux = DatosIO::loadAuxForce(rutaAuxHermano, listaAtomosTemporal);
         if (!errAux.isEmpty()) return errAux;
     } else {
         return tr("Error: No se localizó el archivo auxiliar .aux en el directorio.");
@@ -1121,14 +1140,12 @@ QString MoleculaView::loadFileMopacForce(const QString& ruta) {
     // 2. Limpieza preventiva de la memoria RAM activa del negocio
     resetVariablesClase();
 
-    m_trayectoria     = trayectoriaTemporal; // Si tu variable se llama m_trayectoria corrígela aquí
-    m_trayectoria     = trayectoriaTemporal;
-    m_tam_trayectoria = m_trayectoria.size();
-
-    // 3. ─── [CORREGIDO]: VOLCADO SEGURO CON ESCALA Y CENTRO DE MASAS COMPLETO ───
-    m_listaAtomos     = m_trayectoria.last().listaAtomos;
+    // 3. Volcado seguro de la geometría procesada y limpia
+    m_listaAtomos     = listaAtomosTemporal;
     m_comentario      = comentarioTemporal;
     m_argumentos      = argumentosTemporal;
+    m_trayectoria.clear();   // En FORCE estático limpiamos la animación secuencial
+    m_tam_trayectoria = 0;
 
     // Recalculamos el contador secuencial de IDs al valor máximo de los átomos leídos
     int maxId = 0;
@@ -1137,7 +1154,7 @@ QString MoleculaView::loadFileMopacForce(const QString& ruta) {
     }
     m_contadorIds = maxId;
 
-    // 4. Extraemos las frecuencias vibracionales reales desde el .out con el nuevo parser de MOPAC v23
+    // 4. Extraemos las frecuencias vibracionales reales desde el .out con el parser de MOPAC v23
     DatosIO::loadFrecuencias(ruta, m_listaFrecuencias);
 
     // Volcamos el texto plano del log cuántico en el monitor de consola de la UI
@@ -1155,9 +1172,6 @@ QString MoleculaView::loadFileMopacForce(const QString& ruta) {
         QString errorEspejo = DatosIO::loadVisMol(rutaEspejoVismol, basuraAtomos, listaEnlacesTemporal, basuraComentario);
         if (errorEspejo.isEmpty()) {
             m_listaEnlaces = listaEnlacesTemporal;
-            for (int i = 0; i < m_trayectoria.size(); ++i) {
-                m_trayectoria[i].listaEnlaces = listaEnlacesTemporal;
-            }
             topologiaCargadaConExito = true;
         }
     }
@@ -1242,6 +1256,7 @@ TipoFormato MoleculaView::getTipoArchivo(const QString& ruta){
     bool tieneJobEnded        = false;
     bool tieneMopacDone       = false;
     bool tieneAtomXUpdated    = false;
+    bool tieneAtomXForce      = false; // ─── ¡NUEVA BANDERA!
     bool tieneAtomos          = false;
     bool tieneEnlaces         = false;
     bool tieneNormalAnalysis  = false;
@@ -1250,7 +1265,6 @@ TipoFormato MoleculaView::getTipoArchivo(const QString& ruta){
 
     int lineasLeidas = 0;
 
-    // Escaneamos las líneas de cabecera de forma exhaustiva para capturar la firma cuántica
     while (!entrada.atEnd() && lineasLeidas < 2000) {
         QString linea = entrada.readLine();
         lineasLeidas++;
@@ -1258,9 +1272,12 @@ TipoFormato MoleculaView::getTipoArchivo(const QString& ruta){
         if (linea.contains("SUMMARY OF", Qt::CaseInsensitive))               esMopacArc          = true;
         if (linea.contains("JOB ENDED NORMALLY", Qt::CaseInsensitive))       tieneJobEnded       = true;
         if (linea.contains("ATOM_X_UPDATED:ANGSTROMS", Qt::CaseInsensitive)) tieneAtomXUpdated   = true;
+
+        // Detección de la firma geométrica exclusiva del .aux de tipo FORCE
+        if (linea.contains("ATOM_X_FORCE:ANGSTROMS", Qt::CaseInsensitive))   tieneAtomXForce     = true;
+
         if (linea.contains("MOPAC DONE", Qt::CaseInsensitive))               tieneMopacDone      = true;
 
-        // ─── ANCLAJE DE ESPECTRO IR: Captura las dos variantes de MOPAC v23 ───
         if (linea.contains("Normal mode analysis", Qt::CaseInsensitive) ||
             linea.contains("DESCRIPTION OF VIBRATIONS", Qt::CaseInsensitive)) {
             tieneNormalAnalysis = true;
@@ -1273,17 +1290,19 @@ TipoFormato MoleculaView::getTipoArchivo(const QString& ruta){
     }
     archivo.close();
 
-    // Enrutamiento jerárquico del formato real
+    // ─── MATRIZ ENRUTADORA EXCLUSIVA Y HONESTA ───
     if (tieneAtomos && tieneEnlaces) return TipoFormato::VISMOL;
     if (esMopacArc)                  return TipoFormato::ARC;
 
-    // REGLA DE EXCLUSIVIDAD: Si es un archivo de salida cuántico y contiene modos vibracionales
-    if ((tieneJobEnded || tieneMopacDone) && tieneNormalAnalysis) {
-        return TipoFormato::FORCE_OUT; // ─── ¡TOKEN SEGURO GARANTIZADO!
-    }
+    if ((tieneJobEnded || tieneMopacDone) && tieneNormalAnalysis) return TipoFormato::FORCE_OUT;
     if (tieneJobEnded || tieneMopacDone) return TipoFormato::OUT;
 
     if (linea3Vacia && !linea4Vacia) return TipoFormato::DAT;
+
+    // Si el archivo analizado físicamente es el .aux de fuerzas:
+    if (tieneAtomXForce)             return TipoFormato::FORCE_AUX;
+
+    // Si es el .aux común de trayectorias animadas:
     if (tieneAtomXUpdated)           return TipoFormato::AUX;
 
     return TipoFormato::NO_SE_SABE;

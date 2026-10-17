@@ -906,7 +906,7 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
 
     // Evaluamos los criterios de compatibilidad química específicos para cada tipo de panel
     bool admiteConsola     = (!modoLienzo.estaVacio && (modoLienzo.formato == TipoFormato::OUT || modoLienzo.formato == TipoFormato::ARC || modoLienzo.formato == TipoFormato::AUX || modoLienzo.formato == TipoFormato::FORCE_OUT));
-    bool admiteFrecuencias = (!modoLienzo.estaVacio && modoLienzo.formato == TipoFormato::FORCE_OUT);
+    bool admiteFrecuencias = (!modoLienzo.estaVacio && (modoLienzo.formato == TipoFormato::FORCE_OUT || modoLienzo.formato == TipoFormato::FORCE_AUX));
 
     // --- SUBSECCIÓN A: GESTIÓN SEMÁNTICA DE LA CONSOLA DE TEXTO (LOG) ---
     m_accionesAnalisis.mostrarConsola->setEnabled(admiteConsola);
@@ -949,8 +949,11 @@ void MoleculaVista::alCambiarModoLienzo(const MoleculaView::ModoLienzo& modoLien
 
             if (!espectroReal.isEmpty()) {
                 // Poblamos el widget con los datos reales indexados
-                for (const auto& nodo : espectroReal) {
-                    QString itemTexto = QString("%1 cm⁻¹ - Modo Normal Vibracional (IR)").arg(nodo.frecuencia, 0, 'f', 1);
+                for (int i = 0; i < espectroReal.size(); ++i) {
+                    // Formateo quirúrgico: "Modo 01: 1035.40 cm⁻¹"
+                    QString itemTexto = QString("Modo %1:    %2 cm⁻¹")
+                                            .arg(i + 1, 2, 10, QChar('0')) // Rellena con 0 a la izquierda
+                                            .arg(espectroReal[i].frecuencia, 0, 'f', 2); // 2 decimales fijos
                     m_listaFrecuencias->addItem(itemTexto);
                 }
 
@@ -1046,16 +1049,32 @@ void MoleculaVista::alCambiarDeslizadorFotograma(int fotograma){
 }
 
 void MoleculaVista::alSeleccionarFrecuencia(int indice){
-    if (indice < 0 || !m_view || !m_listaFrecuencias) return;
+    // Red de seguridad: si el índice es inválido o se limpia, apagamos el motor en seco
+    if (indice < 0 || !m_view || !m_listaFrecuencias) {
+        if (m_lienzo) {
+            m_lienzo->apagarVibracion();
+            m_lienzo->actualizarLienzo(); // Pinta la estructura en reposo absoluto
+        }
+        return;
+    }
 
     // 1. Extraemos el texto del renglón seleccionado
     QString textoModo = m_listaFrecuencias->item(indice)->text();
 
-    // 2. Imprimimos feedback contextual inmediato en tu barra de estado Sunken
+    // 2. Imprimimos el feedback contextual en tu barra de estado Sunken
     m_lblEstadoTexto->setText(tr(" Analizando espectro: %1").arg(textoModo));
 
-    // 3. Informamos al cerebro el índice base cero activo para el cálculo de desplazamientos
+    // 3. Informamos de forma síncrona al cerebro de negocio el índice activo
     m_view->setFrecuenciaActiva(indice);
+
+    // 4. Activamos la animación tridimensional e inclinación orbital en el lienzo
+    if (m_lienzo) {
+        // Forzamos al cerebro a cambiar al Modo Rotación 3D para apreciar la deformación en volumen
+        m_view->setModoEditor(MoleculaView::ModoRotacion3D);
+
+        // Arrancamos el latido armónico a 30 FPS fluidos (33 milisegundos)
+        m_lienzo->encenderVibracion(33);
+    }
 }
 
 void MoleculaVista::alPlayAnimacion(bool activado){
@@ -1271,9 +1290,10 @@ void MoleculaVista::setTemaApp(){
         "border: 1px solid #2d2d2d; "
         "border-radius: 4px; "
         "font-family: 'Consolas', 'Courier New', monospace; "
-        "font-size: 14px; "
+        "font-size: 16px; "
         "padding: 6px; "
         "min-width: 700px; " /* ¡NUEVO! Fuerza a que el panel sea el triple de ancho */
+        "min-height: 200px; "
         "}"
 
         "QListWidget#listaFrecuencias::item { "

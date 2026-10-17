@@ -13,6 +13,7 @@
 #include <QtMath> // Requerido para qSqrt()
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QTimer>
 
 MoleculaLienzo::MoleculaLienzo(QWidget* parent)
     : QGraphicsView(parent){
@@ -37,6 +38,10 @@ MoleculaLienzo::MoleculaLienzo(QWidget* parent)
 
     this->setMouseTracking(true);
     this->setDragMode(QGraphicsView::NoDrag);
+
+    m_timerVibracion = new QTimer(this);
+    connect(m_timerVibracion, &QTimer::timeout, this, &MoleculaLienzo::avanzarOscilacionVibratoria);
+
 }
 
 MoleculaLienzo::~MoleculaLienzo(){
@@ -69,77 +74,78 @@ void MoleculaLienzo::actualizarLienzo(){
     QVector<Atomo> listaAtomos      = m_view->getListaAtomos();
     QVector<Enlace> listaEnlaces    = m_view->getListaEnlaces();
 
+    // ─── CORRECCIÓN DEL AJUSTE FINO DEL ÍNDICE ACTIVO ───
+    QVector<Frecuencias> espectro = m_view->getListaFrecuencias();
+
+    // Extraemos de forma limpia el índice base cero almacenado en la RAM del negocio
+    int idxFreq = m_view->getFrecuenciaActiva();
+
+    // Si hay una frecuencia seleccionada válida en el cerebro, deformamos los átomos armónicamente
+    if (idxFreq >= 0 && idxFreq < espectro.size()) {
+        const Frecuencias& fichaFreq = espectro[idxFreq];
+
+        // Ajustamos la amplitud de la oscilación visual para que sea perceptible en la pantalla
+        const float AMPLITUD_GRAFICA = 30.0f;
+        float factorSeno = qSin(m_faseVibracion) * AMPLITUD_GRAFICA;
+
+        for (Atomo& atomo : listaAtomos) {
+            // Buscamos los desplazamientos dx, dy, dz asignados por MOPAC a este ID de átomo
+            for (const Vibraciones& v : fichaFreq.vibraciones) {
+                if (v.id_atomo == atomo.id) {
+                    // Deformamos armónicamente la posición del lienzo antes de proyectar
+                    atomo.posicion.setX(atomo.posicion.x() + (v.dx * factorSeno));
+                    atomo.posicion.setY(atomo.posicion.y() + (v.dy * factorSeno));
+                    atomo.posicion.setZ(atomo.posicion.z() + (v.dz * factorSeno));
+                    break;
+                }
+            }
+        }
+    }
+
     m_escena->clear();
 
     // =========================================================================
-    // 1. RENDERIZAMOS LOS ENLACES (LÍNEAS CON TRASLACIÓN O ROTACIÓN EXCLUSIVA)
+    // 1. RENDERIZAMOS LOS ENLACES (Ahora leerán p1 y p2 deformados armónicamente)
     // ==========================================================================
     QPen penEnlaces(QColor("#D1D5DB"));
     penEnlaces.setWidthF(3.0f);
     penEnlaces.setCapStyle(Qt::RoundCap);
-
     const qreal offsetDist = 8.0;
 
     for(const Enlace &enlace: listaEnlaces){
-        QVector3D   posOrigen;
-        QVector3D   posDestino;
-        bool        origenEncontrado    = false;
-        bool        destinoEncontrado   = false;
-
+        QVector3D posOrigen, posDestino;
+        bool oEncontrado = false, dEncontrado = false;
         for(const Atomo &atomo: listaAtomos){
-            if(atomo.id == enlace.id_atomo1){
-                posOrigen           = atomo.posicion;
-                origenEncontrado    = true;
-            }
-            if(atomo.id == enlace.id_atomo2){
-                posDestino          = atomo.posicion;
-                destinoEncontrado   = true;
-            }
-            if(origenEncontrado && destinoEncontrado){
-                break;
-            }
+            if(atomo.id == enlace.id_atomo1) { posOrigen = atomo.posicion; oEncontrado = true; }
+            if(atomo.id == enlace.id_atomo2) { posDestino = atomo.posicion; dEncontrado = true; }
+            if(oEncontrado && dEncontrado) break;
         }
-        if(origenEncontrado && destinoEncontrado){
-            QPointF p1;
-            QPointF p2;
-
-            // Maquinaria de decisión exclusiva y limpia: O una o la otra
+        if(oEncontrado && dEncontrado){
+            QPointF p1, p2;
             if (m_view->getModoEditor() == MoleculaView::ModoSeleccion) {
-                // Si desplazamos, la vista está de frente (ángulos = 0). Mover punto directo.
                 p1 = MoleculaMat::moverPunto(posOrigen, m_deltaX, m_deltaY);
                 p2 = MoleculaMat::moverPunto(posDestino, m_deltaX, m_deltaY);
             } else {
-                // Si rotamos, aplicamos tu proyección cuántica 3D estándar de la casa
                 p1 = MoleculaMat::rotarPunto(posOrigen, m_anguloX, m_anguloY);
                 p2 = MoleculaMat::rotarPunto(posDestino, m_anguloX, m_anguloY);
             }
-
-            // Calculamos el vector de dirección basándonos en los nuevos puntos proyectados
             qreal dx = p2.x() - p1.x();
             qreal dy = p2.y() - p1.y();
             qreal longitud = qSqrt(dx * dx + dy * dy);
-
             if (longitud < 0.001) continue;
-
-            // Vector unitario perpendicular adaptado al giro de la pantalla
             qreal px = -dy / longitud;
             qreal py = dx / longitud;
 
-            // Dibujamos utilizando p1 y p2 corregidos de forma exclusiva
             if (enlace.orden == 1) {
                 m_escena->addLine(p1.x(), p1.y(), p2.x(), p2.y(), penEnlaces)->setZValue(0);
             }
             else if (enlace.orden == 2) {
-                qreal ox = px * (offsetDist / 2.0);
-                qreal oy = py * (offsetDist / 2.0);
-
+                qreal ox = px * (offsetDist / 2.0); qreal oy = py * (offsetDist / 2.0);
                 m_escena->addLine(p1.x() + ox, p1.y() + oy, p2.x() + ox, p2.y() + oy, penEnlaces)->setZValue(0);
                 m_escena->addLine(p1.x() - ox, p1.y() - oy, p2.x() - ox, p2.y() - oy, penEnlaces)->setZValue(0);
             }
             else if (enlace.orden >= 3) {
-                qreal ox = px * offsetDist;
-                qreal oy = py * offsetDist;
-
+                qreal ox = px * offsetDist; qreal oy = py * offsetDist;
                 m_escena->addLine(p1.x(), p1.y(), p2.x(), p2.y(), penEnlaces)->setZValue(0);
                 m_escena->addLine(p1.x() + ox, p1.y() + oy, p2.x() + ox, p2.y() + oy, penEnlaces)->setZValue(0);
                 m_escena->addLine(p1.x() - ox, p1.y() - oy, p2.x() - ox, p2.y() - oy, penEnlaces)->setZValue(0);
@@ -148,70 +154,74 @@ void MoleculaLienzo::actualizarLienzo(){
     }
 
     // =========================================================================
-    // 2. RENDERIZAMOS LOS ATOMOS (ELIPSES TRASLADADAS O ROTADAS EXCLUSIVAS)
+    // 2. RENDERIZAMOS LOS ATOMOS
     // ==========================================================================
     for(const Atomo &atomo: listaAtomos){
-        qreal   radio   = Atomos::getRadio(atomo.simbolo);
-        QColor  color   = Atomos::getColor(atomo.simbolo);
-
+        qreal radio = Atomos::getRadio(atomo.simbolo);
+        QColor color = Atomos::getColor(atomo.simbolo);
         QPointF posProyectada;
 
-        // Misma máquina de estados pura para el centro de los átomos
         if (m_view->getModoEditor() == MoleculaView::ModoSeleccion) {
             posProyectada = MoleculaMat::moverPunto(atomo.posicion, m_deltaX, m_deltaY);
         } else {
             posProyectada = MoleculaMat::rotarPunto(atomo.posicion, m_anguloX, m_anguloY);
         }
 
-        qreal x         = posProyectada.x() - radio;
-        qreal y         = posProyectada.y() - radio;
-        qreal diametro  = radio * 2.0f;
+        qreal x = posProyectada.x() - radio;
+        qreal y = posProyectada.y() - radio;
+        qreal diametro = radio * 2.0f;
 
         QGraphicsEllipseItem* elipse = m_escena->addEllipse(x, y, diametro, diametro);
         elipse->setBrush(QColor(color));
         elipse->setPen(QPen(QColor("#1F2937"), 1.5f));
         elipse->setZValue(1);
 
-        // Feedback visual adaptado a la coordenada del átomo
         if (m_view && m_view->getIdAtomoSeleccionado() == atomo.id) {
             qreal radioAnillo = radio + 6.0;
             qreal xAnillo = posProyectada.x() - radioAnillo;
             qreal yAnillo = posProyectada.y() - radioAnillo;
-            qreal diametroAnillo = radioAnillo * 2.0;
-
-            QGraphicsEllipseItem* anilloSel = m_escena->addEllipse(xAnillo, yAnillo, diametroAnillo, diametroAnillo);
-
-            QPen penSel(QColor("#38BDF8"));
-            penSel.setWidthF(2.5f);
-            penSel.setStyle(Qt::DashLine);
-
-            anilloSel->setPen(penSel);
-            anilloSel->setBrush(Qt::NoBrush);
-            anilloSel->setZValue(3);
+            QGraphicsEllipseItem* anilloSel = m_escena->addEllipse(xAnillo, yAnillo, radioAnillo * 2.0, radioAnillo * 2.0);
+            QPen penSel(QColor("#38BDF8")); penSel.setWidthF(2.5f); penSel.setStyle(Qt::DashLine);
+            anilloSel->setPen(penSel); anilloSel->setZValue(3);
         }
 
-        // Renderizado del Símbolo Químico en concordancia con el centro proyectado
         QGraphicsSimpleTextItem* texto = m_escena->addSimpleText(atomo.simbolo);
-
-        QFont fuenteApp("Segoe UI", 12, QFont::Bold);
-        fuenteApp.setStyleHint(QFont::SansSerif);
-        texto->setFont(fuenteApp);
-
-        if (Atomos::isTextoOscuro(atomo.simbolo)) {
-            texto->setBrush(QColor("#111827"));
-        } else {
-            texto->setBrush(QColor("#FFFFFF"));
-        }
-
+        QFont fuenteApp("Segoe UI", 12, QFont::Bold); texto->setFont(fuenteApp);
+        texto->setBrush(QColor(Atomos::isTextoOscuro(atomo.simbolo) ? "#111827" : "#FFFFFF"));
         QRectF contornoTexto = texto->boundingRect();
-        texto->setPos(
-            posProyectada.x() - (contornoTexto.width() / 2),
-            posProyectada.y() - (contornoTexto.height() / 2)
-            );
+        texto->setPos(posProyectada.x() - (contornoTexto.width() / 2), posProyectada.y() - (contornoTexto.height() / 2));
         texto->setZValue(2);
     }
 
     this->viewport()->update();
+}
+
+void MoleculaLienzo::encenderVibracion(int ms) {
+    if (m_timerVibracion && !m_timerVibracion->isActive()) {
+        m_timerVibracion->start(ms);
+    }
+}
+
+void MoleculaLienzo::apagarVibracion() {
+    if (m_timerVibracion) {
+        m_timerVibracion->stop();
+    }
+    m_faseVibracion = 0.0f; // Retorno inmediato al estado de equilibrio estable
+}
+
+//###############################################################################################
+// Private slots
+//##############################################################################################
+
+void MoleculaLienzo::avanzarOscilacionVibratoria() {
+    // Incrementamos el ángulo angular de la fase (aproximadamente 30 FPS fluidos)
+    m_faseVibracion += 0.2f;
+    if (m_faseVibracion > 6.2831f) { // 2 * PI: reseteo de ciclo limpio para evitar desbordamientos
+        m_faseVibracion = 0.0f;
+    }
+
+    // Forzamos el repintado de la escena con la nueva deformación calculada
+    actualizarLienzo();
 }
 
 //##############################################################################################

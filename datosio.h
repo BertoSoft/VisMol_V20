@@ -20,6 +20,7 @@ public:
     static QString  saveVisMol(const QString& ruta, const QVector<Atomo>& m_listaAtomos, const QVector<Enlace>& m_listaEnlaces, const QString& comentario);
     static QString  saveMOPAC(const QString& ruta, const QVector<Atomo>& m_listaAtomos, const QString& comentario, const QString& argumentos);
     static QString  leerLogTexto(const QString& ruta);
+    static QString  loadAuxForce(const QString& ruta, QVector<Atomo>& m_listaAtomos);
 
 private:
     static inline const float FACTOR_ANGSTROM = 100.0f;
@@ -31,7 +32,7 @@ private:
     static QString              parseARC(QTextStream& entrada, QVector<Atomo>& m_listaAtomos);
     static QString              parseMopacAux(QTextStream& entrada, QVector<Trayectoria>& m_trayectoria, QString& comentario, QString& argumentos);
     static QVector<Frecuencias> parserFrecuencias(const QString& ruta);
-
+    static QString              parseAuxForce(QTextStream& entrada, QVector<Atomo>& m_listaAtomos);
 
     // Utilitario privado de refactorización para evitar código duplicado en Trayectorias
     static void procesarYCentrarFotograma(const QStringList& plantillaSimbolos, const QVector<float>& coordsEtapa, QVector<Trayectoria>& m_trayectoria);

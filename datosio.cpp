@@ -135,6 +135,25 @@ QString DatosIO::loadMopacAux(
     archivo.close();
     return resultado;
 }
+
+QString DatosIO::loadAuxForce(const QString& ruta, QVector<Atomo>& m_listaAtomos) {
+    QFile archivo(ruta);
+    if (!archivo.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString("Error: No se pudo abrir el archivo auxiliar de fuerzas %1").arg(ruta);
+    }
+
+    QTextStream entrada(&archivo);
+
+    // Limpieza preventiva transaccional en la memoria antes de poblar
+    m_listaAtomos.clear();
+
+    // Delegamos de forma segura en la maquinaria del parser privado
+    QString resultado = parseAuxForce(entrada, m_listaAtomos);
+
+    archivo.close();
+    return resultado; // Retorna el éxito o el código de error de sintaxis del parser
+}
+
 QString DatosIO::saveVisMol(
     const QString& ruta,
     const QVector<Atomo>& m_listaAtomos,
@@ -742,5 +761,82 @@ QVector<Frecuencias> DatosIO::parserFrecuencias(const QString& ruta) {
     }
 
     return resultadoEspectro;
+}
+
+QString DatosIO::parseAuxForce(QTextStream& entrada, QVector<Atomo>& m_listaAtomos) {
+    if (entrada.atEnd()) return "Archivo .aux de fuerzas vacío.";
+
+    m_listaAtomos.clear();
+    QStringList plantillaSimbolos;
+    QVector<float> coordsFuerza;
+
+    bool procesandoAtomos = false;
+    bool procesandoCoordenadas = false;
+
+    while (!entrada.atEnd()) {
+        QString linea = entrada.readLine().trimmed();
+        if (linea.isEmpty()) continue;
+
+        if (linea.startsWith("ATOM_EL[")) {
+            procesandoAtomos = true;
+            procesandoCoordenadas = false;
+            continue;
+        }
+        else if (linea.startsWith("ATOM_X_FORCE:ANGSTROMS[")) {
+            procesandoCoordenadas = true;
+            procesandoAtomos = false;
+            continue;
+        }
+        else if (linea.contains('=')) {
+            procesandoAtomos = false;
+            procesandoCoordenadas = false;
+        }
+
+        if (procesandoAtomos) {
+            plantillaSimbolos.append(linea.simplified().split(' ', Qt::SkipEmptyParts));
+        }
+        else if (procesandoCoordenadas) {
+            QStringList tokens = linea.simplified().split(' ', Qt::SkipEmptyParts);
+            for (const QString& token : tokens) {
+                coordsFuerza.append(token.toFloat());
+            }
+        }
+    }
+
+    if (plantillaSimbolos.isEmpty()) return "Error FORCE: Falta sección 'ATOM_EL:'.";
+    if (coordsFuerza.isEmpty()) return "Error FORCE: Falta sección 'ATOM_X_FORCE:'.";
+
+    // Reconstrucción e inyección tridimensional indexada
+    int ptr = 0;
+    QVector3D acumulador(0.0f, 0.0f, 0.0f);
+
+    for (int i = 0; i < plantillaSimbolos.size(); ++i) {
+        if (ptr + 2 >= coordsFuerza.size()) break;
+
+        Atomo atomo;
+        atomo.id = i + 1;
+        atomo.simbolo = plantillaSimbolos[i];
+
+        // Escalamos de Ångstroms a píxeles estables de la vista
+        float x = coordsFuerza[ptr]   * FACTOR_ANGSTROM;
+        float y = coordsFuerza[ptr+1] * FACTOR_ANGSTROM;
+        float z = coordsFuerza[ptr+2] * FACTOR_ANGSTROM;
+
+        atomo.posicion = QVector3D(x, y, z);
+        ptr += 3;
+
+        acumulador += atomo.posicion;
+        m_listaAtomos.append(atomo);
+    }
+
+    // Centralización geométrica obligatoria contra el origen del lienzo
+    if (!m_listaAtomos.isEmpty()) {
+        QVector3D centroDeMasas = acumulador / m_listaAtomos.size();
+        for (Atomo& a : m_listaAtomos) {
+            a.posicion -= centroDeMasas;
+        }
+    }
+
+    return "";
 }
 

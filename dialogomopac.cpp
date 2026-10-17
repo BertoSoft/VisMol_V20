@@ -93,17 +93,19 @@ QString DialogoMopac::construirKeywords() {
 
     switch (m_comboTarea->currentIndex()) {
     case 0:
-        // Optimización por defecto del motor
+        // Optimización geométrica por defecto del motor cuántico v23
         break;
 
     case 1:
-        // [CORREGIDO]: 'AUX' y 'LARGE' limpios para asegurar la generación de fotogramas de la trayectoria
+        // 'AUX' y 'LARGE' limpios para asegurar la generación de fotogramas de la trayectoria
         cmdKeywords += " AUX LARGE";
         break;
 
     case 2:
-        // Tarea de cálculo de frecuencias vibracionales e IR
-        cmdKeywords += " AUX FORCE LET GEO-OK";
+        // ─── CONFIGURACIÓN DE MODOS NORMALES EN MOPAC v23 ───
+        // Al enviar 'AUX FORCE', el motor v23 primero optimizará estrictamente la
+        // geometría hasta el equilibrio y luego verterá el bloque 'ATOM_X_FORCE' en el .aux
+        cmdKeywords += " AUX FORCE";
         break;
     }
 

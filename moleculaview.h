@@ -17,6 +17,7 @@ enum TipoFormato {
     ARC,
     AUX,
     FORCE_OUT,
+    FORCE_AUX,
     NO_SE_SABE
 };
 
@@ -134,6 +135,7 @@ public:
     QString                 getRutaArchivoActual();
     int                     getTamTrayectoria();
     QVector<Frecuencias>    getListaFrecuencias();
+    int                     getFrecuenciaActiva();
 
     // =========================================================================
     // 7. ZONA: SEÑALES DE NOTIFICACIÓN (MÓVILES DE SINCRONIZACIÓN VISTA-MODELO)
