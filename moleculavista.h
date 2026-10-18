@@ -64,6 +64,7 @@ private slots:
     void detenerMopac();
     void mostrarFrecuencias();
     void mostrarConsolaLog();
+    void mostrarMenuFlotanteMedida(const QString& textoMedida);
 
     // =========================================================================
     // BLOQUE: GESTIÓN DE BOTONERÍA Y CONTROLES INTERNOS DE INTERFAZ
@@ -122,6 +123,7 @@ private:
         QAction* hidrogeno      = nullptr;
         QAction* oxigeno        = nullptr;
         QAction* nitrogeno      = nullptr;
+        QAction* azufre         = nullptr;
         QAction* tablaPeriodica = nullptr;  // ¡NUEVO! Acción para desplegar la tabla
         QAction* modoSeleccion  = nullptr;
         QAction* modoEnlace     = nullptr;

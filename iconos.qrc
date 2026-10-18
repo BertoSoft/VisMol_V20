@@ -26,5 +26,6 @@
         <file>iconos/ver_texto.png</file>
         <file>iconos/frecuencias.png</file>
         <file>iconos/detener.png</file>
+        <file>iconos/atomo_s.png</file>
     </qresource>
 </RCC>

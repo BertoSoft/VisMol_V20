@@ -22,8 +22,10 @@ public:
     static QString  leerLogTexto(const QString& ruta);
     static QString  loadAuxForce(const QString& ruta, QVector<Atomo>& m_listaAtomos);
 
-private:
     static inline const float FACTOR_ANGSTROM = 100.0f;
+
+
+private:
 
     // Parsers modulares independientes especializados por extensión de archivo
     static QString              parseVisMol(QTextStream& entrada, QVector<Atomo>& m_listaAtomos, QVector<Enlace>& m_listaEnlaces, QString& comentario);

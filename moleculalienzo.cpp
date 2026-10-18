@@ -73,39 +73,21 @@ void MoleculaLienzo::actualizarLienzo(){
 
     QVector<Atomo> listaAtomos      = m_view->getListaAtomos();
     QVector<Enlace> listaEnlaces    = m_view->getListaEnlaces();
+    QVector<Frecuencias> espectro   = m_view->getListaFrecuencias();
 
-    // ─── CORRECCIÓN DEL AJUSTE FINO DEL ÍNDICE ACTIVO ───
-    QVector<Frecuencias> espectro = m_view->getListaFrecuencias();
-
-    // Extraemos de forma limpia el índice base cero almacenado en la RAM del negocio
     int idxFreq = m_view->getFrecuenciaActiva();
 
-    // Si hay una frecuencia seleccionada válida en el cerebro, deformamos los átomos armónicamente
+    // ─── ¡NUEVO!: FACTOR DE OSCILACIÓN CENTRALIZADO PARA EVITAR CONFLICTOS ───
+    float factorSeno = 0.0f;
     if (idxFreq >= 0 && idxFreq < espectro.size()) {
-        const Frecuencias& fichaFreq = espectro[idxFreq];
-
-        // Ajustamos la amplitud de la oscilación visual para que sea perceptible en la pantalla
         const float AMPLITUD_GRAFICA = 30.0f;
-        float factorSeno = qSin(m_faseVibracion) * AMPLITUD_GRAFICA;
-
-        for (Atomo& atomo : listaAtomos) {
-            // Buscamos los desplazamientos dx, dy, dz asignados por MOPAC a este ID de átomo
-            for (const Vibraciones& v : fichaFreq.vibraciones) {
-                if (v.id_atomo == atomo.id) {
-                    // Deformamos armónicamente la posición del lienzo antes de proyectar
-                    atomo.posicion.setX(atomo.posicion.x() + (v.dx * factorSeno));
-                    atomo.posicion.setY(atomo.posicion.y() + (v.dy * factorSeno));
-                    atomo.posicion.setZ(atomo.posicion.z() + (v.dz * factorSeno));
-                    break;
-                }
-            }
-        }
+        factorSeno = qSin(m_faseVibracion) * AMPLITUD_GRAFICA;
     }
 
     m_escena->clear();
 
     // =========================================================================
-    // 1. RENDERIZAMOS LOS ENLACES (Ahora leerán p1 y p2 deformados armónicamente)
+    // 1. RENDERIZAMOS LOS ENLACES - CON PROYECCIÓN TRIDIMENSIONAL SINCRONIZADA
     // ==========================================================================
     QPen penEnlaces(QColor("#D1D5DB"));
     penEnlaces.setWidthF(3.0f);
@@ -114,21 +96,50 @@ void MoleculaLienzo::actualizarLienzo(){
 
     for(const Enlace &enlace: listaEnlaces){
         QVector3D posOrigen, posDestino;
+        QVector3D vibOrigen(0,0,0), vibDestino(0,0,0);
         bool oEncontrado = false, dEncontrado = false;
+
         for(const Atomo &atomo: listaAtomos){
-            if(atomo.id == enlace.id_atomo1) { posOrigen = atomo.posicion; oEncontrado = true; }
-            if(atomo.id == enlace.id_atomo2) { posDestino = atomo.posicion; dEncontrado = true; }
+            if(atomo.id == enlace.id_atomo1) {
+                posOrigen = atomo.posicion;
+                oEncontrado = true;
+                // Buscamos su vector de oscilación cuántica si hay frecuencia activa
+                if (idxFreq >= 0 && idxFreq < espectro.size()) {
+                    for (const Vibraciones& v : espectro[idxFreq].vibraciones) {
+                        if (v.id_atomo == atomo.id) {
+                            vibOrigen = QVector3D(v.dx * factorSeno, v.dy * factorSeno, v.dz * factorSeno);
+                            break;
+                        }
+                    }
+                }
+            }
+            if(atomo.id == enlace.id_atomo2) {
+                posDestino = atomo.posicion;
+                dEncontrado = true;
+                // Buscamos su vector de oscilación cuántica si hay frecuencia activa
+                if (idxFreq >= 0 && idxFreq < espectro.size()) {
+                    for (const Vibraciones& v : espectro[idxFreq].vibraciones) {
+                        if (v.id_atomo == atomo.id) {
+                            vibDestino = QVector3D(v.dx * factorSeno, v.dy * factorSeno, v.dz * factorSeno);
+                            break;
+                        }
+                    }
+                }
+            }
             if(oEncontrado && dEncontrado) break;
         }
+
         if(oEncontrado && dEncontrado){
             QPointF p1, p2;
             if (m_view->getModoEditor() == MoleculaView::ModoSeleccion) {
                 p1 = MoleculaMat::moverPunto(posOrigen, m_deltaX, m_deltaY);
                 p2 = MoleculaMat::moverPunto(posDestino, m_deltaX, m_deltaY);
             } else {
-                p1 = MoleculaMat::rotarPunto(posOrigen, m_anguloX, m_anguloY);
-                p2 = MoleculaMat::rotarPunto(posDestino, m_anguloX, m_anguloY);
+                // Rotamos la posición base y le sumamos la vibración rotada bajo los mismos ángulos de cámara
+                p1 = MoleculaMat::rotarPunto(posOrigen, m_anguloX, m_anguloY) + MoleculaMat::rotarPunto(vibOrigen, m_anguloX, m_anguloY);
+                p2 = MoleculaMat::rotarPunto(posDestino, m_anguloX, m_anguloY) + MoleculaMat::rotarPunto(vibDestino, m_anguloX, m_anguloY);
             }
+
             qreal dx = p2.x() - p1.x();
             qreal dy = p2.y() - p1.y();
             qreal longitud = qSqrt(dx * dx + dy * dy);
@@ -154,9 +165,9 @@ void MoleculaLienzo::actualizarLienzo(){
     }
 
     // =========================================================================
-    // 2. RENDERIZAMOS LOS ATOMOS
+    // 2. RENDERIZAMOS LOS ATOMOS - CON PROYECCIÓN TRIDIMENSIONAL INDEPENDIENTE
     // ==========================================================================
-    for(const Atomo &atomo: listaAtomos){
+    for(const Atomo &atomo : listaAtomos){
         qreal radio = Atomos::getRadio(atomo.simbolo);
         QColor color = Atomos::getColor(atomo.simbolo);
         QPointF posProyectada;
@@ -164,7 +175,23 @@ void MoleculaLienzo::actualizarLienzo(){
         if (m_view->getModoEditor() == MoleculaView::ModoSeleccion) {
             posProyectada = MoleculaMat::moverPunto(atomo.posicion, m_deltaX, m_deltaY);
         } else {
+            // Rotamos la posición estática en reposo
             posProyectada = MoleculaMat::rotarPunto(atomo.posicion, m_anguloX, m_anguloY);
+
+            // Si el modo analítico está corriendo, rotamos su empuje dinámico
+            if (idxFreq >= 0 && idxFreq < espectro.size()) {
+                for (const Vibraciones& v : espectro[idxFreq].vibraciones) {
+                    if (v.id_atomo == atomo.id) {
+                        QVector3D vectorVibracionCrudo(v.dx * factorSeno, v.dy * factorSeno, v.dz * factorSeno);
+                        QPointF vibracionProyectada = MoleculaMat::rotarPunto(vectorVibracionCrudo, m_anguloX, m_anguloY);
+
+                        // Acumulamos directamente sobre el plano de proyección bidimensional
+                        posProyectada.setX(posProyectada.x() + vibracionProyectada.x());
+                        posProyectada.setY(posProyectada.y() + vibracionProyectada.y());
+                        break;
+                    }
+                }
+            }
         }
 
         qreal x = posProyectada.x() - radio;

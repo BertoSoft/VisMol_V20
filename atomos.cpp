@@ -29,32 +29,24 @@ bool Atomos::isTextoOscuro(const QString& simbolo){
  * @return true si el enlace es compatible con la química orgánica elemental estándar, false si se bloquea.
  */
 bool Atomos::isCompatibles(const QString& simbolo1, const QString& simbolo2){
-    // Caso de control: Si intentamos enlazar un átomo exactamente consigo mismo (ej: C-C, O-O, N-N)
     if (simbolo1 == simbolo2) {
-        // Excepciones homonucleares admitidas: C-C, O-O y N-N. Bloqueamos de forma tajante el H-H molecular orgánico.
-        return (simbolo1 == "C" || simbolo1 == "O" || simbolo1 == "N");
+        return (simbolo1 == "C" || simbolo1 == "O" || simbolo1 == "N" || simbolo1 == "S");
     }
 
-    // --- FILTRO PARA EL HIDRÓGENO (H) ---
     if (simbolo1 == "H" || simbolo2 == "H") {
         QString compañero = (simbolo1 == "H") ? simbolo2 : simbolo1;
-        // El hidrógeno orgánico elemental estándar en esta aplicación solo se enlaza con C, O o N
-        return (compañero == "C" || compañero == "O" || compañero == "N");
+        return (compañero == "C" || compañero == "O" || compañero == "N" || compañero == "S");
     }
 
-    // --- FILTRO PARA EL CARBONO (C) ---
     if (simbolo1 == "C" || simbolo2 == "C") {
-        return true; // El carbono actúa como esqueleto universal orgánico, se enlaza a todos los admitidos
-    }
-
-    // --- FILTRO PARA LA CONECTIVIDAD NITRÓGENO-OXÍGENO (N-O) ---
-    if ((simbolo1 == "N" && simbolo2 == "O") || (simbolo1 == "O" && simbolo2 == "N")) {
         return true;
     }
 
-    // ─── [CORREGIDO] PROTOCOLO DE DESCARTE ABSOLUTO SEGURO ───
-    // Si la pareja química de átomos analizada no cumple ningún patrón orgánico del sistema,
-    // o incluye algún elemento desconocido, la función devuelve false impidiendo la creación del enlace.
+    // Permitir enlaces Nitrógeno-Oxígeno y Oxígeno-Azufre / Nitrógeno-Azufre comunes
+    if ((simbolo1 == "N" && simbolo2 == "O") || (simbolo1 == "O" && simbolo2 == "N")) return true;
+    if ((simbolo1 == "S" && simbolo2 == "O") || (simbolo1 == "O" && simbolo2 == "S")) return true;
+    if ((simbolo1 == "S" && simbolo2 == "N") || (simbolo1 == "N" && simbolo2 == "S")) return true;
+
     return false;
 }
 
@@ -74,6 +66,7 @@ void Atomos::initAtomos(){
         { 2, "Carbono",   "C", QColor("#4B5563"), 36.0, 4, false }, // Configuración CPK gris oscuro
         { 3, "Oxígeno",   "O", QColor("#EF4444"), 32.0, 2, false }, // Configuración CPK rojo
         { 4, "Nitrógeno", "N", QColor("#3B82F6"), 34.0, 3, false }, // Configuración CPK azul eléctrico
+        { 5, "Azufre", "S", QColor("#FBBF24"), 50.0, 6, false },    // Configuración CPK amarillo
     };
 }
 

@@ -121,17 +121,13 @@ void DialogoMopac::setEstilos(){
 
     QString estiloComentario =
         "QLineEdit#txtComentarioResaltado {"
-        "   background-color: #f2f2f2;"
-        "   color: #0033cc;"
-        "   border: 1px solid #a0a0a0;"
+        "   background-color: #202225;" // Gris oscuro integrado
+        "   color: #39ff14;"            // Texto verde esmeralda analítico
+        "   border: 1px solid #2d2d2d;"
         "   border-radius: 4px;"
         "   padding: 6px;"
-        "   font-weight: bold;"
-        "}"
-        "QLineEdit#txtComentarioResaltado:focus {"
-        "   background-color: #e6e6e6;"
-        "   border: 1px solid #0033cc;"
         "}";
+
 
     m_txtComentario->setStyleSheet(estiloComentario);
 }

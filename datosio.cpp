@@ -665,98 +665,133 @@ QVector<Frecuencias> DatosIO::parserFrecuencias(const QString& ruta) {
     QString filaValores = "";
     QStringList lineasEstructura;
 
-    // 2. ESCANEO DEL BLOQUE COMPLETO DE MODOS NORMALES
+    // =========================================================================
+    // 2. ESCANEO DEL BLOQUE COMPLETO DE MODOS NORMALES (ACUMULACIÓN CORREGIDA)
+    // =========================================================================
+    QVector<float> todasLasFrecuenciasDetectadas;
+
     while (!lector.atEnd()) {
         QString linea = lector.readLine();
         QString lineaTrimmed = linea.trimmed();
 
-        // Paramos si empieza el siguiente bloque de MOPAC
         if (linea.contains("MASS-WEIGHTED COORDINATE ANALYSIS") || linea.contains("FORCE CONSTANT IN CARTESIAN")) {
             break;
         }
 
         if (lineaTrimmed.isEmpty()) continue;
 
-        // Capturamos de forma dinámica la fila de valores de cm⁻¹ si no la teníamos ya
-        if (filaValores.isEmpty() && !lineaTrimmed.startsWith("Root") &&
+        // Capturamos de forma continua todas las filas horizontales de cm⁻¹ sin bloquear el estado
+        if (!lineaTrimmed.startsWith("Root") &&
             !lineaTrimmed.contains("A'") && !lineaTrimmed.contains("A\"") &&
-            !lineaTrimmed.contains("Ag") && !lineaTrimmed.contains("B1u") && !lineaTrimmed.contains("B2u") &&
-            regexDigitos.match(lineaTrimmed).hasMatch()) {
+            !lineaTrimmed.contains("Ag") && !lineaTrimmed.contains("B1u") &&
+            !lineaTrimmed.contains("B2u") && !lineaTrimmed.contains("E2u") &&
+            !lineaTrimmed.contains("B1g") && !lineaTrimmed.contains("E2g") &&
+            !lineaTrimmed.contains("A2u") && !lineaTrimmed.contains("E1g") &&
+            regexDigitos.match(lineaTrimmed).hasMatch() &&
+            !regexFilaDesplazamiento.match(lineaTrimmed).hasMatch()) {
 
-            filaValores = lineaTrimmed;
+            // Extraemos todos los números decimales individuales de esta fila analizada
+            QRegularExpressionMatchIterator itFila = regexDigitos.globalMatch(lineaTrimmed);
+            while (itFila.hasNext()) {
+                todasLasFrecuenciasDetectadas.append(itFila.next().captured(1).toFloat());
+            }
             continue;
         }
 
-        // Acumulamos las filas de datos numéricos de los átomos
         QRegularExpressionMatch matchAtomo = regexFilaDesplazamiento.match(linea);
         if (matchAtomo.hasMatch()) {
             lineasEstructura.append(linea);
         }
     }
 
-    // 3. PROCESADO E INYECCIÓN DE METADATOS DE FRECUENCIAS (cm⁻¹)
-    QRegularExpressionMatchIterator itFreq = regexDigitos.globalMatch(filaValores);
-    QVector<int> indicesColumnasValidas; // Guarda la posición de las columnas que son > 10 cm⁻¹
+    // =========================================================================
+    // 3 y 4. EXTRACCIÓN DE MODOS DINÁMICOS (CORREGIDO DE ESTÁTICO A DINÁMICO)
+    // =========================================================================
+    // En lugar de: int totalAtomosReales = 12;
+    // Calculamos las líneas del bloque según las filas que MOPAC arroje en la estructura
+
+    // Contamos cuántas líneas de coordenadas arroja un bloque analizando lineasEstructura
+    // Cada átomo tiene 3 filas (X, Y, Z). Buscamos el ID máximo en la primera columna.
+    int maxIdAtomo = 0;
+    for (const QString& linea : lineasEstructura) {
+        QRegularExpressionMatch match = regexFilaDesplazamiento.match(linea);
+        if (match.hasMatch()) {
+            int idFilaMatriz = match.captured(1).toInt();
+            int idAtomoMapeado = (idFilaMatriz - 1) / 3;
+            if (idAtomoMapeado > maxIdAtomo) {
+                maxIdAtomo = idAtomoMapeado;
+            }
+        }
+    }
+    int totalAtomosReales = maxIdAtomo + 1; // Ajuste dinámico real del archivo abierto
+    int lineasPorBloqueVertical = totalAtomosReales * 3;
+
+    // Contenedor temporal para construir el espectro completo antes del filtrado estricto
+    QVector<Frecuencias> espectroCompleto;
+    QVector<int> indicesColumnasValidas;
     int columnaCandidata = 0;
 
-    while (itFreq.hasNext()) {
-        QRegularExpressionMatch match = itFreq.next();
-        float valorCm1 = match.captured(1).toFloat();
-
+    for (int i = 0; i < todasLasFrecuenciasDetectadas.size(); ++i) {
+        float valorCm1 = todasLasFrecuenciasDetectadas[i];
         if (valorCm1 > 10.0f) {
             Frecuencias ficha;
             ficha.frecuencia = valorCm1;
-            resultadoEspectro.append(ficha);
-            indicesColumnasValidas.append(columnaCandidata);
-        }
-        columnaCandidata++;
-    }
-
-    if (resultadoEspectro.isEmpty() || lineasEstructura.isEmpty()) {
-        return resultadoEspectro;
-    }
-
-    // 4. EXTRACCIÓN MODULAR EN MATRIZ DE LAS VIBRACIONES (dx, dy, dz)
-    // Inicializamos la rejilla de vibraciones para cada frecuencia válida detectada
-    for (int i = 0; i < resultadoEspectro.size(); ++i) {
-        // Necesitamos tantas fichas de vibración como átomos se hayan leído (tamaño de líneas / 3 ejes)
-        int totalAtomos = lineasEstructura.size() / 3;
-        for (int a = 0; a < totalAtomos; ++a) {
-            Vibraciones v;
-            v.id_atomo = a + 1; // Asignamos el ID correlativo base 1
-            v.dx = 0.0f; v.dy = 0.0f; v.dz = 0.0f;
-            resultadoEspectro[i].vibraciones.append(v);
+            // Inicializamos sus 12 átomos a cero
+            for (int a = 0; a < totalAtomosReales; ++a) {
+                Vibraciones v; v.id_atomo = a + 1;
+                v.dx = 0.0f; v.dy = 0.0f; v.dz = 0.0f;
+                ficha.vibraciones.append(v);
+            }
+            espectroCompleto.append(ficha);
+            indicesColumnasValidas.append(i);
         }
     }
 
-    // Procesamos el sándwich de 3 ejes (X, Y, Z) por cada átomo
+    // Rellenamos las amplitudes tridimensionales indexando por bloque vertical
     for (int i = 0; i < lineasEstructura.size(); ++i) {
         QRegularExpressionMatch match = regexFilaDesplazamiento.match(lineasEstructura[i]);
         if (match.hasMatch()) {
+            int bloqueVerticalActual = i / lineasPorBloqueVertical;
             int idFilaMatriz = match.captured(1).toInt();
-            int idAtomoMapeado = ((idFilaMatriz - 1) / 3); // Agrupa las líneas de 3 en 3 por átomo
-            int ejeActivo = (idFilaMatriz - 1) % 3;        // 0 = X, 1 = Y, 2 = Z
+            int idAtomoMapeado = (idFilaMatriz - 1) / 3;
+            int ejeActivo = (idFilaMatriz - 1) % 3;
 
-            // Extraemos los tres valores numéricos que MOPAC imprimió en esta fila
+            if (idAtomoMapeado >= totalAtomosReales) continue;
+
             float col1 = match.captured(2).toFloat();
             float col2 = match.captured(3).toFloat();
             float col3 = match.captured(4).toFloat();
             float columnasCrudas[3] = { col1, col2, col3 };
 
-            // Inyectamos el desplazamiento en la frecuencia correspondiente mapeando su columna
-            for (int f = 0; f < resultadoEspectro.size(); ++f) {
-                int columnaMopacTarget = indicesColumnasValidas[f];
+            for (int f = 0; f < espectroCompleto.size(); ++f) {
+                int columnaGlobalGlobal = indicesColumnasValidas[f];
+                int bloqueDeEstaFrecuencia = columnaGlobalGlobal / 3;
 
-                // Red de seguridad por si MOPAC vuelca menos columnas de las esperadas
-                if (columnaMopacTarget >= 3) continue;
+                if (bloqueDeEstaFrecuencia != bloqueVerticalActual) continue;
 
-                float valorDesplazamiento = columnasCrudas[columnaMopacTarget];
+                int columnaLocalBloque = columnaGlobalGlobal % 3;
+                float valorDesplazamiento = columnasCrudas[columnaLocalBloque];
 
-                // Asignamos el diferencial al eje tridimensional correspondiente
-                if (ejeActivo == 0) resultadoEspectro[f].vibraciones[idAtomoMapeado].dx = valorDesplazamiento;
-                if (ejeActivo == 1) resultadoEspectro[f].vibraciones[idAtomoMapeado].dy = valorDesplazamiento;
-                if (ejeActivo == 2) resultadoEspectro[f].vibraciones[idAtomoMapeado].dz = valorDesplazamiento;
+                if (ejeActivo == 0) espectroCompleto[f].vibraciones[idAtomoMapeado].dx = valorDesplazamiento;
+                if (ejeActivo == 1) espectroCompleto[f].vibraciones[idAtomoMapeado].dy = valorDesplazamiento;
+                if (ejeActivo == 2) espectroCompleto[f].vibraciones[idAtomoMapeado].dz = valorDesplazamiento;
             }
+        }
+    }
+
+    // ─── FILTRO ESTRICTO DEFINITIVO ───
+    // Solo dejamos pasar al resultado final aquellos modos cuyas amplitudes no sean todas 0.0f
+    for (const Frecuencias& ficha : espectroCompleto) {
+        bool tieneMovimientoReal = false;
+        for (const Vibraciones& v : ficha.vibraciones) {
+            if (qAbs(v.dx) > 0.0001f || qAbs(v.dy) > 0.0001f || qAbs(v.dz) > 0.0001f) {
+                tieneMovimientoReal = true;
+                break;
+            }
+        }
+        // Si MOPAC proporcionó datos de movimiento para esta frecuencia, la ceñimos a la UI
+        if (tieneMovimientoReal) {
+            resultadoEspectro.append(ficha);
         }
     }
 

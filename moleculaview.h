@@ -147,6 +147,7 @@ signals:
     void            notificarMensajeEstado(const QString& mensaje);
     void            notificaContenidoLog(const QString& log);
     void            setMenuEliminar(const int& idAtomo, const int& idEnlace);
+    void            solicitarMenuFlotanteMedida(const QString& textoMedida);
 
     // =========================================================================
     // 8. ZONA: MÉTODOS INTERNOS PRIVADOS (PROCESAMIENTO DE CLICKS GRÁFICOS)
@@ -188,6 +189,7 @@ private:
     int         getIdAtomoFromPos(const QVector3D& posClick);
     bool        isEnlacePosible(const Atomo& atomo1, const Atomo& atomo2);
     int         getEnlaces(const Atomo& atomo);
+    Atomo       getAtomoFromId(int id);
     float       getDistanciaPuntoSegmento(const QVector3D& punto, const QVector3D& pos1, const QVector3D& pos2);
 
     // =========================================================================
@@ -223,6 +225,10 @@ private:
 
     int                     m_contadorIds         = 0;
     int                     m_idAtomoSeleccionado = -1;
+
+    Atomo                   m_Atomo1;
+    Atomo                   m_Atomo2;
+
 };
 
 #endif // MOLECULAVIEW_H

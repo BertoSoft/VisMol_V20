@@ -598,44 +598,80 @@ void MoleculaView::procesarClickDibujoAtomo(const QVector3D& posClick) {
 }
 
 void MoleculaView::procesarClickSeleccion(const QVector3D& posClick) {
-    // ─── PASO 1: SI EL ANCLA ESTÁ FUERA DE LA ESCENA (GESTO DE PULSAR) ───
+    // 1. Buscamos de forma inmediata si hay un átomo real bajo la coordenada exacta
+    int idAtomoBajoCursor = getIdAtomoFromPos(posClick);
+
+    // ─── ANCLAJE ORIGINAL DE ARRASTRE INTACTO (NO SE TOCA) ───
     if (m_ultimaPosRat.x() < -5000.0f) {
-        m_ultimaPosRat = posClick; // Registramos la coordenada de la escena inicial de partida
-        return;                      // Salimos limpiamente, el arrastre óptico toma el control
+        m_ultimaPosRat = posClick; // Guarda el inicio del arrastre para el lienzo
+        return;
     }
 
-    // ─── PASO 2: SI EL ANCLA YA ERA VÁLIDA (GESTO DE SOLTAR) ───
     if (m_ultimaPosRat.x() >= -5000.0f) {
-        if (!m_listaAtomos.isEmpty()) {
+        float deltaX = posClick.x() - m_ultimaPosRat.x();
+        float deltaY = posClick.y() - m_ultimaPosRat.y();
+        QVector3D vectorTraslacionFinal(deltaX, deltaY, 0.0f);
 
-            // ─── TU DETECCIÓN QUIRÚRGICA: RESTA EXPLÍCITA COMPONENTE A COMPONENTE ───
-            // Extraemos los diferenciales planos puros de la pantalla calculando las diferencias
-            float deltaX = posClick.x() - m_ultimaPosRat.x();
-            float deltaY = posClick.y() - m_ultimaPosRat.y();
-
-            // Construimos el vector tridimensional real de traslación manteniendo Z neutro
-            QVector3D vectorTraslacionFinal(deltaX, deltaY, 0.0f);
-
-            // Filtro antipánico de ruido mecánico del hardware (Umbral de 3 píxeles/unidades)
-            if (vectorTraslacionFinal.length() > 3.0f) {
-
-                // B. Guardamos una única foto pura del pasado original en el historial (Ctrl+Z)
+        // =========================================================================
+        // ESCENARIO A: EL USUARIO ESTÁ ARRASTRANDO (MOVIMIENTO CONFIRMADO)
+        // =========================================================================
+        if (vectorTraslacionFinal.length() > 3.0f) {
+            if (!m_listaAtomos.isEmpty()) {
                 pushAtras();
-
-                // C. MUTACIÓN REAL DE COORDENADAS: Movemos todos los átomos de golpe en la RAM
                 for (Atomo& atomo : m_listaAtomos) {
                     atomo.posicion += vectorTraslacionFinal;
                 }
 
-                // D. Activamos de forma oficial el asterisco de cambios sin guardar en la ventana
+                // Si arrastramos la estructura, limpiamos la medición por coherencia
+                m_Atomo1.id = -1;
+                m_Atomo2.id = -1;
+
                 ModoLienzo modoTmp = m_modoLienzo;
                 modoTmp.estaGuardado = false;
                 setModoLienzo(modoTmp);
             }
         }
+        // =========================================================================
+        // ESCENARIO B: CLIC FIJO (MEDICIÓN QUÍMICA CON m_Atomo1 Y m_Atomo2)
+        // =========================================================================
+        else if (idAtomoBajoCursor >= 0) {
 
-        // ─── PASO 3: PROTOCOLO DE RESETEO DE TRANSACCIÓN ───
-        // Restauramos la coordenada de control fuera de mapa para el próximo arrastre
+            // FASE 1: Registro del Primer Átomo
+            if (m_Atomo1.id < 0) {
+                m_Atomo1 = getAtomoFromId(idAtomoBajoCursor);
+
+                emit notificarMensajeEstado(tr(" 📏 Primer átomo seleccionado: %1%2. Señale el segundo...")
+                                                .arg(m_Atomo1.simbolo).arg(m_Atomo1.id));
+            }
+            // FASE 2: Captura del Segundo Átomo y Envío de la Métrica
+            else if (m_Atomo2.id < 0 && idAtomoBajoCursor != m_Atomo1.id) {
+                m_Atomo2 = getAtomoFromId(idAtomoBajoCursor);
+
+                // Calculamos la distancia geométrica real usando la RAM tridimensional
+                float distanciaPixeles = m_Atomo1.posicion.distanceToPoint(m_Atomo2.posicion);
+                float distanciaAngstrom = distanciaPixeles / DatosIO::FACTOR_ANGSTROM;
+
+                QString infoMedida = tr("Distancia [%1%2 - %3%4]: %5 Å")
+                                         .arg(m_Atomo1.simbolo).arg(m_Atomo1.id)
+                                         .arg(m_Atomo2.simbolo).arg(m_Atomo2.id)
+                                         .arg(static_cast<double>(distanciaAngstrom), 0, 'f', 3);
+
+                // El cerebro ordena a la vista desplegar el menú flotante
+                emit solicitarMenuFlotanteMedida(infoMedida);
+
+                // Limpieza total y segura de la cola interna para la próxima consulta
+                m_Atomo1.id = -1;
+                m_Atomo2.id = -1;
+            }
+        }
+        // Clic en el vacío del lienzo: cancela la medición actual
+        else {
+            m_Atomo1.id = -1;
+            m_Atomo2.id = -1;
+            setMensajeEstado();
+        }
+
+        // ─── RESETEO ORIGINAL DE ARRASTRE INTACTO (NO SE TOCA) ───
         m_ultimaPosRat = QVector3D(-10000.0f, -10000.0f, -10000.0f);
     }
 }
@@ -760,6 +796,9 @@ void MoleculaView::resetVariablesClase(){
     // 7.- frecuencias
     m_listaFrecuencias.clear();
     m_frecuenciaActiva = -1;
+
+    m_Atomo1.id = -1;
+    m_Atomo2.id = -1;
 
 }
 
@@ -1380,6 +1419,14 @@ int MoleculaView::getEnlaces(const Atomo& atomo){
         }
     }
     return totalEnlaces;
+}
+
+Atomo MoleculaView::getAtomoFromId(int id){
+    for(const Atomo& atomo: m_listaAtomos){
+        if(atomo.id == id){
+            return atomo;
+        }
+    }
 }
 
 float MoleculaView::getDistanciaPuntoSegmento(const QVector3D& punto, const QVector3D& pos1, const QVector3D& pos2){

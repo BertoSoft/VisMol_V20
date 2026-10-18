@@ -16,6 +16,7 @@
 #include <QInputDialog>
 #include <QBoxLayout>
 #include <QPushButton>
+#include <QToolTip>
 
 // =========================================================================
 // ZONA: CICLO DE VIDA DE LA VENTANA
@@ -380,10 +381,15 @@ void MoleculaVista::initToolBarIzda(){
     m_accionesElementos.nitrogeno->setCheckable(true);
     m_accionesElementos.nitrogeno->setIcon(QIcon(":/iconos/atomo_n.png"));
 
+    m_accionesElementos.azufre = new QAction(tr("Azufre"));
+    m_accionesElementos.azufre->setCheckable(true);
+    m_accionesElementos.azufre->setIcon(QIcon(":/iconos/atomo_s.png"));
+
     m_barraElementos->addAction(m_accionesElementos.carbono);
     m_barraElementos->addAction(m_accionesElementos.hidrogeno);
     m_barraElementos->addAction(m_accionesElementos.oxigeno);
     m_barraElementos->addAction(m_accionesElementos.nitrogeno);
+    m_barraElementos->addAction(m_accionesElementos.azufre);
 
     m_barraElementos->addSeparator();
     m_barraElementos->addSeparator();
@@ -403,6 +409,7 @@ void MoleculaVista::initToolBarIzda(){
     m_grupoElementos->addAction(m_accionesElementos.hidrogeno);
     m_grupoElementos->addAction(m_accionesElementos.oxigeno);
     m_grupoElementos->addAction(m_accionesElementos.nitrogeno);
+    m_grupoElementos->addAction(m_accionesElementos.azufre);
     m_grupoElementos->addAction(m_accionesElementos.modoSeleccion);
     m_grupoElementos->addAction(m_accionesElementos.modoEnlace);
     m_grupoElementos->addAction(m_accionesElementos.modoRotar);
@@ -535,6 +542,7 @@ void MoleculaVista::initConnect(){
     connect(m_accionesElementos.hidrogeno, &QAction::triggered, this, [this](){ alSeleccionarElemento("H"); });
     connect(m_accionesElementos.oxigeno, &QAction::triggered, this, [this](){ alSeleccionarElemento("O"); });
     connect(m_accionesElementos.nitrogeno, &QAction::triggered, this, [this](){ alSeleccionarElemento("N"); });
+    connect(m_accionesElementos.azufre, &QAction::triggered, this, [this](){ alSeleccionarElemento("S"); });
     connect(m_accionesElementos.modoSeleccion, &QAction::triggered, this, &MoleculaVista::alActivarModoSeleccion);
     connect(m_accionesElementos.modoEnlace, &QAction::triggered, this, &MoleculaVista::alActivarModoEnlace);
     connect(m_accionesElementos.modoRotar, &QAction::triggered, this, &MoleculaVista::alActivarModoRotar);
@@ -576,6 +584,9 @@ void MoleculaVista::initConnect(){
 
     connect(m_panelConsola, &QDockWidget::visibilityChanged, m_accionesAnalisis.mostrarConsola, &QAction::setChecked);
     connect(m_panelFrecuencias, &QDockWidget::visibilityChanged, m_accionesAnalisis.mostrarFreq, &QAction::setChecked);
+
+    // Menu de medida
+    connect(m_view, &MoleculaView::solicitarMenuFlotanteMedida, this, &MoleculaVista::mostrarMenuFlotanteMedida);
 
     // Iniciamos los valores de Fabrica
     MoleculaView::ModoLienzo modo;
@@ -811,6 +822,29 @@ void MoleculaVista::mostrarFrecuencias(){}
 
 void MoleculaVista::mostrarConsolaLog(){}
 
+void MoleculaVista::mostrarMenuFlotanteMedida(const QString& textoMedida) {
+    // 📐 Creamos un contenedor flotante con el look CPK oscuro de tu aplicación
+    QString htmlContenedor = QString(
+                                 "<div style='background-color: #222222; "
+                                 "            border: 1px solid #38BDF8; "
+                                 "            padding: 8px 12px; "
+                                 "            border-radius: 4px; "
+                                 "            color: #ffffff; "
+                                 "            font-family: \"Segoe UI\", Arial, sans-serif; "
+                                 "            font-size: 13px;'>"
+                                 "   <span style='color: #9CA3AF; font-weight: bold;'>📏 ANALIZADOR DE DISTANCIAS</span><br/>"
+                                 "   <div style='margin-top: 4px; font-size: 14px;'>%1</div>"
+                                 "</div>"
+                                 ).arg(textoMedida);
+
+    // Desplegamos el panel flotante con prioridad absoluta inyectando un leve offset en Y
+    // para que la caja no quede oculta debajo de la propia flecha del ratón
+    QPoint posGlobal = QCursor::pos();
+    posGlobal.setY(posGlobal.y() + 18);
+
+    QToolTip::showText(posGlobal, htmlContenedor, this);
+}
+
 // =========================================================================
 // ZONA: INTERACCIONES Y BOTONERÍA DE INTERFAZ
 // =========================================================================
@@ -999,6 +1033,7 @@ void MoleculaVista::alCambiarModoEditor(const MoleculaView::ModoEditor& modoEdit
         else if (m_view->getSimboloAtomoActivo() == "H") m_accionesElementos.hidrogeno->setChecked(true);
         else if (m_view->getSimboloAtomoActivo() == "O") m_accionesElementos.oxigeno->setChecked(true);
         else if (m_view->getSimboloAtomoActivo() == "N") m_accionesElementos.nitrogeno->setChecked(true);
+        else if (m_view->getSimboloAtomoActivo() == "S") m_accionesElementos.azufre->setChecked(true);
         m_lienzo->setCursor(Qt::CrossCursor); // Cruz de precisión para dibujar
         break;
 
